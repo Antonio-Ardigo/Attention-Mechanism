@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Q/K/V Roles Emerge</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --panel:#ffffff; --ink:#1a1d24; --muted:#5b626e;
+    --line:#e4e7ec; --accent:#3b6ef6; --q:#3b6ef6; --k:#e2662f; --v:#12a150;
+    --code:#f0f2f6; --shadow:0 1px 3px rgba(20,25,40,.06),0 8px 24px rgba(20,25,40,.05);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0f1216;--panel:#161a21;--ink:#e8eaf0;--muted:#9aa2b1;
+      --line:#252b35;--accent:#6a94ff;--q:#6a94ff;--k:#f0894f;--v:#3ecb7a;--code:#1b2029;
+      --shadow:0 1px 3px rgba(0,0,0,.4),0 8px 30px rgba(0,0,0,.35);}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:860px;margin:0 auto;padding:48px 22px 90px}
+  header h1{font-size:2rem;line-height:1.15;margin:0 0 .4em;letter-spacing:-.02em}
+  .lede{font-size:1.15rem;color:var(--muted);margin:0 0 8px}
+  .thesis{border-left:3px solid var(--accent);padding:14px 18px;margin:26px 0;
+    background:var(--panel);border-radius:0 10px 10px 0;box-shadow:var(--shadow);font-size:1.05rem}
+  h2{font-size:1.3rem;margin:52px 0 4px;letter-spacing:-.01em}
+  h2 .n{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:.5em}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px;margin:18px 0;box-shadow:var(--shadow)}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .pill{display:inline-block;padding:.1em .5em;border-radius:6px;font-size:.85em;font-weight:600}
+  .pill.q{background:color-mix(in srgb,var(--q) 16%,transparent);color:var(--q)}
+  .pill.k{background:color-mix(in srgb,var(--k) 16%,transparent);color:var(--k)}
+  .pill.v{background:color-mix(in srgb,var(--v) 16%,transparent);color:var(--v)}
+  .lenses{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}
+  .lens{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--code)}
+  .lens h4{margin:0 0 6px;font-size:.95rem}
+  .lens .mono{font-size:.85rem;color:var(--muted)}
+  .controls{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin:6px 0 16px}
+  .ctl{display:flex;flex-direction:column;gap:4px;min-width:120px}
+  .ctl label{font-size:.8rem;color:var(--muted);font-weight:600}
+  .ctl input[type=range]{width:150px;accent-color:var(--accent)}
+  .val{font-variant-numeric:tabular-nums;font-weight:700}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:640px){.grid2,.lenses{grid-template-columns:1fr}}
+  .eq{background:var(--code);border-radius:10px;padding:14px 16px;font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:.95rem;overflow-x:auto}
+  .eq .hl-q{color:var(--q);font-weight:700}
+  .eq .hl-k{color:var(--k);font-weight:700}
+  .big{font-size:1.5rem;font-weight:800;font-variant-numeric:tabular-nums}
+  .note{font-size:.9rem;color:var(--muted)}
+  button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--panel);
+    color:var(--ink);padding:8px 16px;border-radius:9px;cursor:pointer;box-shadow:var(--shadow)}
+  button.primary{background:var(--accent);color:#fff;border-color:transparent}
+  button:active{transform:translateY(1px)}
+  canvas{width:100%;height:auto;display:block}
+  .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:.9rem;margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .swatch{width:16px;height:3px;border-radius:2px;display:inline-block}
+  ul.take{margin:6px 0 0;padding-left:20px}
+  ul.take li{margin:8px 0}
+  .foot{margin-top:60px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+  .caveat{background:color-mix(in srgb,var(--k) 9%,transparent);border:1px solid color-mix(in srgb,var(--k) 30%,transparent);
+    border-radius:10px;padding:12px 16px;font-size:.92rem;margin-top:14px}
+  svg{max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>How <span class="pill q">Query</span> <span class="pill k">Key</span> <span class="pill v">Value</span> roles emerge</h1>
+  <p class="lede">Nobody labels one matrix “the query.” The three roles appear on their own — a side effect of the network being graded on one thing.</p>
+</header>
+
+<div class="thesis">
+  <strong>The whole idea in one sentence:</strong> three lenses that start identical are pulled apart by <em>differently-shaped gradients</em>, and they only specialize when the task actually rewards asymmetry.
+</div>
+
+<!-- 1 -->
+<h2><span class="n">1</span>Three lenses on the same word</h2>
+<p class="sub">A word arrives as a list of numbers. Three separate learned matrices — <code>W<sub>Q</sub></code>, <code>W<sub>K</sub></code>, <code>W<sub>V</sub></code> — each reshape it. Same word in, three different vectors out. That is the <em>only</em> difference between query, key, and value: the numbers in their matrix.</p>
+<div class="card">
+  <div class="eq">word x = [1, 0]</div>
+  <div class="lenses">
+    <div class="lens"><h4><span class="pill q">Query</span></h4><div class="mono">Q = x·W<sub>Q</sub> = [0.9, 0.1]<br>“what am I looking for?”</div></div>
+    <div class="lens"><h4><span class="pill k">Key</span></h4><div class="mono">K = x·W<sub>K</sub> = [0.3, 0.7]<br>“what do I advertise?”</div></div>
+    <div class="lens"><h4><span class="pill v">Value</span></h4><div class="mono">V = x·W<sub>V</sub> = [0.5, 0.5]<br>“what do I deliver?”</div></div>
+  </div>
+  <p class="note" style="margin-bottom:0">Nobody wrote “this one is the query.” Training sets the numbers; the roles are what those numbers <em>end up doing</em>.</p>
+</div>
+
+<!-- 2 -->
+<h2><span class="n">2</span>The worked example: why the same-looking pair drifts apart</h2>
+<p class="sub">Attention scores a match as <code>s = <span style="color:var(--q)">Q</span>·<span style="color:var(--k)">K</span></code>. When training pushes the score, the correction each lens receives is scaled by <em>the other</em> lens. That is the engine of specialization — play with it:</p>
+<div class="card">
+  <div class="controls">
+    <div class="ctl"><label>Query&nbsp; Q = <span class="val" id="qv">3</span></label><input id="q" type="range" min="-6" max="6" step="0.5" value="3"></div>
+    <div class="ctl"><label>Key&nbsp; K = <span class="val" id="kv">4</span></label><input id="k" type="range" min="-6" max="6" step="0.5" value="4"></div>
+    <div class="ctl"><label>error signal ∂L/∂s = <span class="val" id="ev">-1</span></label><input id="e" type="range" min="-3" max="3" step="0.5" value="-1"></div>
+  </div>
+  <div class="grid2">
+    <div class="eq">score&nbsp; s = <span class="hl-q">Q</span>·<span class="hl-k">K</span> = <span id="s" class="big">12</span></div>
+    <div class="eq">learning rate η = 0.1</div>
+  </div>
+  <div class="grid2" style="margin-top:14px">
+    <div class="eq">
+      gradient to <span class="hl-q">Q</span> = ∂L/∂s × <span class="hl-k">K</span><br>
+      = <span id="ge1">-1</span> × <span id="gk" class="hl-k">4</span> = <span id="gQ" class="big hl-q">-4</span>
+    </div>
+    <div class="eq">
+      gradient to <span class="hl-k">K</span> = ∂L/∂s × <span class="hl-q">Q</span><br>
+      = <span id="ge2">-1</span> × <span id="gq" class="hl-q">3</span> = <span id="gK" class="big hl-k">-3</span>
+    </div>
+  </div>
+  <p id="verdict" class="note" style="margin:14px 0 0"></p>
+  <div class="caveat" style="margin-top:14px">
+    <strong>Value trains on a different circuit.</strong> <span class="pill v">V</span> never enters the score, so it gets none of this gradient. Its correction arrives through the <em>output blend</em> <code>o = a·V</code>, scaled by how much attention <code>a</code> the word won. Routing (Q, K) and content (V) are learned by two different signals — which is exactly why they specialize into different jobs.
+  </div>
+</div>
+
+<!-- 3 -->
+<h2><span class="n">3</span>The gradient map: same shape, different signal</h2>
+<p class="sub">Forward pass flows down; the learning signal flows back up. Follow the dashed arrows: each lens sits at a different spot, so each receives a differently-shaped correction.</p>
+<div class="card">
+<svg viewBox="0 0 720 300" role="img" aria-label="Computation graph showing forward and backward paths for Q, K, and V">
+  <defs>
+    <marker id="af" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--muted)"/></marker>
+    <marker id="ab" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--accent)"/></marker>
+  </defs>
+  <!-- nodes -->
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" text-anchor="middle">
+    <!-- input -->
+    <rect x="20" y="130" width="70" height="40" rx="8" fill="var(--code)" stroke="var(--line)"/>
+    <text x="55" y="155" fill="var(--ink)">word x</text>
+    <!-- W_Q/K/V -->
+    <rect x="150" y="40" width="90" height="40" rx="8" fill="none" stroke="var(--q)" stroke-width="1.6"/>
+    <text x="195" y="65" fill="var(--q)">Q = xW_Q</text>
+    <rect x="150" y="130" width="90" height="40" rx="8" fill="none" stroke="var(--k)" stroke-width="1.6"/>
+    <text x="195" y="155" fill="var(--k)">K = xW_K</text>
+    <rect x="150" y="220" width="90" height="40" rx="8" fill="none" stroke="var(--v)" stroke-width="1.6"/>
+    <text x="195" y="245" fill="var(--v)">V = xW_V</text>
+    <!-- score -->
+    <rect x="330" y="85" width="96" height="40" rx="8" fill="var(--code)" stroke="var(--line)"/>
+    <text x="378" y="110" fill="var(--ink)">s = Q·K</text>
+    <!-- softmax -->
+    <rect x="470" y="85" width="96" height="40" rx="8" fill="var(--code)" stroke="var(--line)"/>
+    <text x="518" y="110" fill="var(--ink)">a = softmax</text>
+    <!-- output -->
+    <rect x="470" y="200" width="96" height="40" rx="8" fill="var(--code)" stroke="var(--line)"/>
+    <text x="518" y="225" fill="var(--ink)">o = a·V</text>
+    <!-- loss -->
+    <rect x="620" y="140" width="80" height="40" rx="8" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+    <text x="660" y="165" fill="var(--accent)">loss L</text>
+  </g>
+  <!-- forward edges -->
+  <g fill="none" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#af)">
+    <path d="M90,150 L150,60"/><path d="M90,150 L150,150"/><path d="M90,150 L150,240"/>
+    <path d="M240,60 L330,100"/>            <!-- Q->s -->
+    <path d="M240,150 L330,110"/>           <!-- K->s -->
+    <path d="M426,105 L470,105"/>           <!-- s->a -->
+    <path d="M518,125 L518,200"/>           <!-- a->o -->
+    <path d="M240,240 L470,232"/>           <!-- V->o -->
+    <path d="M566,220 L620,175"/>           <!-- o->L -->
+    <path d="M566,105 L620,150"/>           <!-- a->L (via o path label) -->
+  </g>
+  <!-- backward annotations -->
+  <g fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ab)">
+    <path d="M330,118 C280,150 250,120 242,72"/>   <!-- back to Q -->
+    <path d="M330,120 C270,175 250,168 242,158"/>  <!-- back to K -->
+    <path d="M470,224 C360,270 260,270 242,252"/>  <!-- back to V -->
+  </g>
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="11.5" fill="var(--accent)">
+    <text x="255" y="98">∂L/∂W_Q ∝ K</text>
+    <text x="250" y="192">∂L/∂W_K ∝ Q</text>
+    <text x="300" y="286">∂L/∂W_V ∝ a  (through the output)</text>
+  </g>
+</svg>
+<p class="note" style="margin-bottom:0">Q and K meet at the score, so each one’s correction carries the <em>other’s</em> value — symmetric in shape, different in number. V never touches the score; it learns from the output. Three positions, three signals, three roles.</p>
+</div>
+
+<!-- 4 -->
+<h2><span class="n">4</span>The graph: when do the roles actually emerge?</h2>
+<p class="sub">A tiny 2-token attention, trained with real gradient descent. Both lenses start <strong>identical</strong>. We plot how far apart the query and key matrices drift, <code>‖W<sub>Q</sub> − W<sub>K</sub>‖</code>, over training. The task decides whether they specialize.</p>
+<div class="card">
+  <div class="controls">
+    <button class="primary" id="run">▶ Run training</button>
+    <button id="reset">Reset</button>
+    <div class="ctl"><label>learning rate η = <span class="val" id="lrv">0.020</span></label><input id="lr" type="range" min="0.004" max="0.05" step="0.002" value="0.02"></div>
+  </div>
+  <canvas id="chart" width="820" height="380"></canvas>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--q)"></i> Directional task — <b>0 must attend 1, but not the reverse</b></span>
+    <span><i class="swatch" style="background:var(--muted)"></i> Symmetric task — <b>mutual matching</b></span>
+  </div>
+  <p class="note" style="margin-bottom:0">Same architecture, same identical start, same optimizer. The <span style="color:var(--q)"><b>directional</b></span> task pries the two lenses apart — <em>query</em> and <em>key</em> become genuinely different things — while the <span style="color:var(--muted)"><b>symmetric</b></span> task leaves them glued together, because a single shared lens already solves it. <strong>The roles emerge only when the objective rewards them.</strong></p>
+</div>
+
+<!-- 5 -->
+<h2><span class="n">5</span>What to take away</h2>
+<div class="card">
+<ul class="take">
+  <li><b>Q/K/V are three learned lenses, not three hand-labeled jobs.</b> Only the matrix numbers differ.</li>
+  <li><b>Position, not intention, creates the difference.</b> Q and K meet at the score so each gradient carries the other; V learns from the output. Different spot → different signal.</li>
+  <li><b>Symmetry has to be broken by the task.</b> If the objective is symmetric, a shared lens survives untouched. Directionality is the pressure that forces query ≠ key.</li>
+  <li><b>Roles are the optimizer’s solution to one objective</b> — which is why independently trained models keep discovering the <em>same</em> roles nobody assigned.</li>
+</ul>
+<div class="caveat"><strong>What the graph does not prove:</strong> a rising curve shows the lenses <em>became different</em> — not that a head learned any specific human concept like “grammar.” Semantic claims need input-level probing, not a divergence line.</div>
+</div>
+
+<div class="foot">
+  Companion to the TTT training plans in this repo. Toy model: 2 tokens, 2-D lenses, one-hot inputs, plain SGD on <code>‖QKᵀ − target‖²</code>. Real attention is higher-dimensional and multi-head, but the mechanism on display — differently-shaped gradients pulling identical lenses apart — is the real one.
+</div>
+</div>
+
+<script>
+(function(){
+  // ---------- Section 2: interactive gradient ----------
+  const q=document.getElementById('q'),k=document.getElementById('k'),e=document.getElementById('e');
+  const lrFixed=0.1;
+  function upd(){
+    const Q=+q.value,K=+k.value,dLds=+e.value;
+    document.getElementById('qv').textContent=Q;
+    document.getElementById('kv').textContent=K;
+    document.getElementById('ev').textContent=dLds;
+    document.getElementById('s').textContent=(Q*K).toFixed(1);
+    const gQ=dLds*K, gK=dLds*Q;
+    document.getElementById('ge1').textContent=dLds;
+    document.getElementById('ge2').textContent=dLds;
+    document.getElementById('gk').textContent=K;
+    document.getElementById('gq').textContent=Q;
+    document.getElementById('gQ').textContent=gQ.toFixed(1);
+    document.getElementById('gK').textContent=gK.toFixed(1);
+    const v=document.getElementById('verdict');
+    if(Q===K){
+      v.innerHTML='Right now <b>Q = K</b>, so the two gradients are equal — the lenses would move together. This is the trap: identical values receive identical corrections and never differentiate.';
+    }else{
+      const nq=(Q-lrFixed*gQ).toFixed(2), nk=(K-lrFixed*gK).toFixed(2);
+      v.innerHTML='Because Q ≠ K, the corrections differ ('+gQ.toFixed(1)+' vs '+gK.toFixed(1)+
+        '). After one step Q→<b class="hl-q">'+nq+'</b>, K→<b class="hl-k">'+nk+
+        '</b> — they drift apart. Repeat millions of times and the query lens and the key lens become different things.';
+    }
+  }
+  [q,k,e].forEach(el=>el.addEventListener('input',upd)); upd();
+
+  // ---------- Section 4: training simulation (ported 1:1 from the verified Python) ----------
+  // 2x2 matrix helpers
+  const I=[[1,0],[0,1]];
+  const W0=[[0.05,-0.04],[0.03,0.02]];               // fixed identical init
+  const mul=(A,B)=>[[A[0][0]*B[0][0]+A[0][1]*B[1][0], A[0][0]*B[0][1]+A[0][1]*B[1][1]],
+                    [A[1][0]*B[0][0]+A[1][1]*B[1][0], A[1][0]*B[0][1]+A[1][1]*B[1][1]]];
+  const T_=A=>[[A[0][0],A[1][0]],[A[0][1],A[1][1]]];
+  const sub=(A,B)=>[[A[0][0]-B[0][0],A[0][1]-B[0][1]],[A[1][0]-B[1][0],A[1][1]-B[1][1]]];
+  const scl=(A,s)=>[[A[0][0]*s,A[0][1]*s],[A[1][0]*s,A[1][1]*s]];
+  const clone=A=>[[A[0][0],A[0][1]],[A[1][0],A[1][1]]];
+  const frob=A=>Math.sqrt(A[0][0]**2+A[0][1]**2+A[1][0]**2+A[1][1]**2);
+
+  const T_dir=[[0,3],[0,0]];
+  const T_sym=[[2,1.9],[1.9,2]];
+  const STEPS=400;
+
+  function trainCurve(T,lr){
+    let WQ=clone(W0),WK=clone(W0); const diffs=[0];
+    for(let t=0;t<STEPS;t++){
+      const Q=mul(I,T_(WQ)), K=mul(I,T_(WK));      // Q=x·Wᵀ
+      const S=mul(Q,T_(K));                        // S=Q·Kᵀ
+      const E=sub(S,T);
+      const gWQ=mul(T_(scl(mul(E,K),2)),I);        // (2E·K)ᵀ·x
+      const gWK=mul(T_(scl(mul(T_(E),Q),2)),I);    // (2Eᵀ·Q)ᵀ·x
+      WQ=sub(WQ,scl(gWQ,lr)); WK=sub(WK,scl(gWK,lr));
+      diffs.push(frob(sub(WQ,WK)));
+    }
+    return diffs;
+  }
+
+  const cv=document.getElementById('chart'), ctx=cv.getContext('2d');
+  const lr=document.getElementById('lr');
+  let dir=[],sym=[],progress=0,anim=null;
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function recompute(){
+    const L=+lr.value; document.getElementById('lrv').textContent=L.toFixed(3);
+    dir=trainCurve(T_dir,L); sym=trainCurve(T_sym,L);
+  }
+  function draw(){
+    const W=cv.width,H=cv.height,pad=46;
+    ctx.clearRect(0,0,W,H);
+    const ink=css('--ink'),muted=css('--muted'),line=css('--line'),qc=css('--q');
+    const ymax=2.8;
+    const X=i=>pad+(i/STEPS)*(W-pad-14);
+    const Y=v=>H-pad-(v/ymax)*(H-pad-18);
+    // grid + axes
+    ctx.strokeStyle=line;ctx.lineWidth=1;ctx.fillStyle=muted;ctx.font='12px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign='right';ctx.textBaseline='middle';
+    for(let g=0;g<=2.5;g+=0.5){ctx.beginPath();ctx.moveTo(pad,Y(g));ctx.lineTo(W-14,Y(g));ctx.stroke();ctx.fillText(g.toFixed(1),pad-8,Y(g));}
+    ctx.textAlign='center';ctx.textBaseline='top';
+    for(let s=0;s<=STEPS;s+=100){ctx.fillText(s,X(s),H-pad+8);}
+    ctx.save();ctx.translate(14,H/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';
+    ctx.fillText('‖W_Q − W_K‖  (how different the lenses are)',0,0);ctx.restore();
+    ctx.textAlign='center';ctx.fillText('training steps',W/2,H-18);
+    // curves up to progress
+    const plot=(arr,color,wdt)=>{
+      ctx.strokeStyle=color;ctx.lineWidth=wdt;ctx.beginPath();
+      for(let i=0;i<=progress;i++){const px=X(i),py=Y(arr[i]);i?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+      ctx.stroke();
+    };
+    plot(sym,muted,2.2);
+    plot(dir,qc,3);
+    // end dots + labels
+    if(progress>0){
+      const dot=(arr,color,lbl)=>{const px=X(progress),py=Y(arr[progress]);
+        ctx.fillStyle=color;ctx.beginPath();ctx.arc(px,py,4,0,7);ctx.fill();
+        ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 12px ui-monospace,Menlo,Consolas,monospace';
+        if(lbl){ctx.fillText(lbl,px+8,py);}};
+      dot(dir,qc,progress===STEPS?'query ≠ key':'');
+      dot(sym,muted,progress===STEPS?'still identical':'');
+    }
+  }
+  function run(){
+    if(anim)cancelAnimationFrame(anim);
+    recompute(); progress=0;
+    const tick=()=>{progress=Math.min(STEPS,progress+6);draw();if(progress<STEPS)anim=requestAnimationFrame(tick);};
+    tick();
+  }
+  function reset(){if(anim)cancelAnimationFrame(anim);recompute();progress=0;draw();}
+  document.getElementById('run').addEventListener('click',run);
+  document.getElementById('reset').addEventListener('click',reset);
+  lr.addEventListener('input',()=>{recompute();progress=STEPS;draw();});
+  window.addEventListener('resize',draw);
+  reset();
+})();
+</script>
+</body>
+</html>

@@ -13,6 +13,14 @@ Both are built around one idea:
 
 > Nobody teaches attention what to pay attention to. It is a side effect of being repeatedly graded on one thing: predicting the next word.
 
+## Deep dive — how the Q/K/V roles *emerge*
+
+A focused unit on the single most counter-intuitive point: nobody assigns the query/key/value roles — they are pulled apart by differently-shaped gradients, and only when the task rewards asymmetry.
+
+- **[ROLE-EMERGENCE-PLAN.md](ROLE-EMERGENCE-PLAN.md)** — a tight TTT plan (5 core principles, 13 sub-goals) exclusively on emergence: learned projections → gradient-as-blame → symmetry breaking → positional differentiation → emergent roles. No calculus; gradients taught as "direction + size of a nudge."
+- **[emergence-of-qkv.html](emergence-of-qkv.html)** — a self-contained interactive artefact: a live gradient widget (`∂L/∂Q ∝ K`, `∂L/∂K ∝ Q`), a forward/backward computation graph, and a **runnable training-dynamics chart** built on a real 2-token gradient descent. Watch the query and key lenses diverge on a *directional* task while staying identical on a *symmetric* one.
+  → **[View it live](https://raw.githack.com/Antonio-Ardigo/Attention-Mechanism/main/emergence-of-qkv.html)** (rendered via raw.githack; GitHub serves raw `.html` as plain text).
+
 ## Who it's for
 
 Product managers, analysts, designers, executives, and engineers new to ML. No prerequisites.
