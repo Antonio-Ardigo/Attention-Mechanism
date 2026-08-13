@@ -4,7 +4,14 @@ Teaching materials for explaining the Q/K/V attention mechanism to non-technical
 
 ## Contents
 
-- **[TRAINING-PLAN.md](TRAINING-PLAN.md)** — a four-session training plan covering what Query, Key, and Value are, how they get trained, and why attention heads end up specializing without anyone assigning them a job. No math required; one optional formula box for the person who asks.
+Two complementary plans for the same audience — pick by how you like to run a class:
+
+- **[TRAINING-PLAN.md](TRAINING-PLAN.md)** — a *facilitator's* workshop plan: talk tracks, group activities, checks for understanding, and notes on the misconceptions that come up. Best for running a live session. No math required; one optional formula box for the person who asks.
+- **[TTT-TRAINING-PLAN.md](TTT-TRAINING-PLAN.md)** — a *Test-Teach-Test* plan: the same content decomposed into 19 assessment-driven sub-goals with principle extraction, per-concept blueprints, worked examples, CTQ mastery criteria, and pass thresholds. Best for self-paced learning or tracking mastery. **Session 5** covers how Q/K/V are actually *trained* — random initialization, gradient-as-blame, and why Q, K, and V receive different gradients and therefore specialize.
+
+Both are built around one idea:
+
+> Nobody teaches attention what to pay attention to. It is a side effect of being repeatedly graded on one thing: predicting the next word.
 
 ## Who it's for
 
