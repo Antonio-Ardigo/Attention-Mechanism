@@ -18,8 +18,13 @@ Both are built around one idea:
 A focused unit on the single most counter-intuitive point: nobody assigns the query/key/value roles — they are pulled apart by differently-shaped gradients, and only when the task rewards asymmetry.
 
 - **[ROLE-EMERGENCE-PLAN.md](ROLE-EMERGENCE-PLAN.md)** — a tight TTT plan (5 core principles, 13 sub-goals) exclusively on emergence: learned projections → gradient-as-blame → symmetry breaking → positional differentiation → emergent roles. No calculus; gradients taught as "direction + size of a nudge."
-- **[emergence-of-qkv.html](emergence-of-qkv.html)** — a self-contained interactive artefact: a live gradient widget (`∂L/∂Q ∝ K`, `∂L/∂K ∝ Q`), a forward/backward computation graph, and a **runnable training-dynamics chart** built on a real 2-token gradient descent. Watch the query and key lenses diverge on a *directional* task while staying identical on a *symmetric* one.
+- **[emergence-of-qkv.html](emergence-of-qkv.html)** — a self-contained interactive explainer (four widgets). Builds from "what is a word vector" and "what is the score matrix S" up through all five principles, then goes deep on the questions this repo kept getting asked:
+  - **where the Q/K/V idea comes from** (soft dictionary lookup; the Bahdanau → memory-networks → Transformer lineage; reasoned vs. stumbled-upon);
+  - **why Q and K are *not* interchangeable** even though `Q·K` is commutative — the transpose argument with indices, and the wiring asymmetry (`Q_A` feeds only token A's output, `K_A` feeds everyone's), with a click-to-see row/column widget;
+  - **how position is encoded** — one-hot toy vs. real sinusoidal / RoPE positional encodings;
+  - an **interactive gradient-descent exercise** on a real positional task ("attend to the previous token") where you step through the math and watch `‖W_Q−W_K‖` climb as query and key specialize into a *position shifter* and a *position label*.
   → **[View it live](https://raw.githack.com/Antonio-Ardigo/Attention-Mechanism/main/emergence-of-qkv.html)** (rendered via raw.githack; GitHub serves raw `.html` as plain text).
+- **[qkv_gradient_descent.py](qkv_gradient_descent.py)** — the runnable reference for the exercise: full forward + backward pass with sinusoidal positional encodings, printing every intermediate and the query/key divergence. `python qkv_gradient_descent.py`.
 
 ## Who it's for
 

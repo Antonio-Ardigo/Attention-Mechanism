@@ -105,6 +105,29 @@
   svg{max-width:100%;height:auto}
   a{color:var(--accent)}
   .anchor{scroll-margin-top:20px}
+  /* matrices + grids for the deep-dive + exercise */
+  .mrow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;margin:10px 0}
+  .mbox .lbl{color:var(--muted);font-size:.75rem;margin-bottom:4px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .mgrid{display:inline-grid;gap:3px}
+  .mgrid .cell{background:var(--code);border-radius:5px;padding:4px 7px;text-align:right;min-width:52px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;font-variant-numeric:tabular-nums}
+  .agrid .cell{color:#fff;font-weight:700;transition:background .25s}
+  .agrid .cell.tgt{outline:2px solid var(--v);outline-offset:-2px}
+  .rc{--h:transparent}
+  .rc .cell{cursor:pointer}
+  .rc .cell.row{background:color-mix(in srgb,var(--q) 45%,var(--code))}
+  .rc .cell.col{background:color-mix(in srgb,var(--k) 45%,var(--code))}
+  .rc .cell.both{background:color-mix(in srgb,var(--def) 55%,var(--code));color:#fff}
+  .stepbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+  .stepbar .chip{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;color:var(--muted)}
+  .narrate{border-left:3px solid var(--accent);padding:10px 14px;background:var(--code);border-radius:0 8px 8px 0;
+    font-size:.92rem;margin-top:12px}
+  .refbox{font-size:.86rem;color:var(--muted)}
+  .refbox li{margin:4px 0}
+  .rolecols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
+  @media(max-width:640px){.rolecols{grid-template-columns:1fr}}
+  .rolecols .rcard{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--panel)}
+  .rolecols .rcard h4{margin:0 0 6px;font-size:.92rem}
 </style>
 </head>
 <body>
@@ -112,7 +135,7 @@
 <header>
   <h1>How <span class="pill q">Query</span> <span class="pill k">Key</span> <span class="pill v">Value</span> roles emerge</h1>
   <p class="lede">A complete, self-contained explainer — from “what is a word vector” all the way to “why nobody had to assign the query, key, and value jobs.” Built for smart people who are not mathematicians.</p>
-  <p class="meta">No prior ML required. ~30–40 minute read. Every symbol is defined before it is used. Three interactive widgets. Companion to the training plans in this repo.</p>
+  <p class="meta">No prior ML required. Every symbol is defined before it is used. Four interactive widgets, one runnable Python script. Companion to the training plans in this repo.</p>
 </header>
 
 <div class="thesis">
@@ -134,6 +157,10 @@
     <li><a href="#graph">The gradient map</a></li>
     <li><a href="#p5">P5 · Emergent roles (experiment)</a></li>
     <li><a href="#chain">The whole argument in one chain</a></li>
+    <li><a href="#origin">Where the Q/K/V idea comes from</a></li>
+    <li><a href="#whyqk">Why Q and K are NOT interchangeable</a></li>
+    <li><a href="#position">How is position encoded?</a></li>
+    <li><a href="#exercise">Exercise: gradient descent, step by step</a></li>
     <li><a href="#faq">Common misconceptions</a></li>
     <li><a href="#glossary">Glossary &amp; takeaways</a></li>
   </ol>
@@ -458,7 +485,197 @@ A rising curve shows the two lenses <em>became different</em> — it does <b>not
 This is also why <b>independently trained models keep discovering the same roles</b> nobody coordinated. Same objective + same statistics of language → the same low-error solution is found again and again. Convergent structure under shared pressure is the fingerprint of emergence.</div>
 
 <!-- ============ FAQ ============ -->
-<h2 id="faq" class="anchor"><span class="n">8</span>Common misconceptions, answered</h2>
+<!-- ============ 8. ORIGIN ============ -->
+<h2 id="origin" class="anchor"><span class="n">8</span>Where the Q/K/V idea comes from</h2>
+<p class="sub">The names are borrowed, not invented — and the mechanism was engineered to kill a bottleneck, not derived from a theorem.</p>
+
+<div class="box def"><span class="tag">The source: a soft dictionary lookup</span>
+Query / key / value come straight from <b>information retrieval</b> and <b>key-value databases</b>.
+<div class="grid2" style="margin-top:10px">
+  <div class="eq"><b>Hard lookup</b> (a Python <code>dict</code>):<br>value = table[<span class="hl-k">key</span>]<br><span class="note">one key, exact match, one value</span></div>
+  <div class="eq"><b>Soft lookup</b> (attention):<br>compare <span class="hl-q">query</span> to <em>all</em> <span class="hl-k">keys</span> → weights → blend of <span class="hl-v">values</span><br><span class="note">every key, fuzzy match, weighted blend — and differentiable, so it can be <em>learned</em></span></div>
+</div></div>
+
+<div class="box intu"><span class="tag">The library analogy, restated</span>
+You bring a <span class="pill q">query</span> ("books on volcanoes"), scan the <span class="pill k">keys</span> on the spines, and read the <span class="pill v">values</span> inside the best matches. Attention is that, made continuous: instead of picking one book you take a weighted blend of all of them, heavier on the closer matches.</div>
+
+<div class="box link"><span class="tag">The lineage (short and honest)</span>
+<ul class="refbox" style="margin:4px 0 0">
+  <li><b>Content-addressable / associative memory</b> — retrieve by <em>what</em> something is, not <em>where</em> it is stored.</li>
+  <li><b>Memory Networks &amp; Neural Turing Machines (2014–15)</b> — differentiable memory addressed by content; explicit keys and values.</li>
+  <li><b>Bahdanau, Cho &amp; Bengio (2014)</b> — attention for translation ("align &amp; translate"); <b>Luong et al. (2015)</b> — the dot-product form.</li>
+  <li><b>Vaswani et al. (2017), "Attention Is All You Need"</b> — names <b>Query/Key/Value</b> and scaled dot-product attention, framed as "mapping a query and a set of key–value pairs to an output."</li>
+</ul></div>
+
+<div class="box def"><span class="tag">"Borrowed post hoc" — the abstraction came after the mechanism</span>
+The Query/Key/Value <em>vocabulary</em> did not invent attention; it was laid over a mechanism that had already grown, messily, elsewhere. The order of events:
+<ul class="take" style="margin:6px 0">
+  <li><b>Attention first, without the names (2014).</b> Bahdanau's translation model scored a decoder state against each encoder vector <code>h_j</code>, softmaxed the scores, and summed the same <code>h_j</code>'s. Notice: <code>h_j</code> was <em>both</em> the thing matched against <em>and</em> the thing summed — <b>key and value were the same vector.</b> There was no "query/key/value" — just "align, then average."</li>
+  <li><b>Memory networks split key from value (2014–16).</b> End-to-End Memory Networks (Sukhbaatar 2015) stored each fact <em>twice</em>: an <em>input</em> embedding <code>m_i</code> used to match the question, and a separate <em>output</em> embedding <code>c_i</code> used to form the answer. That is exactly <span class="pill k">key</span> vs <span class="pill v">value</span>, addressed by a question vector <code>u</code> = the <span class="pill q">query</span>. <b>Key-Value Memory Networks</b> (Miller 2016) then made the split explicit and named it. Neural Turing Machines (Graves 2014) had already used <em>content-based addressing</em> — a key compared to memory by similarity to produce read-weights.</li>
+  <li><b>The Transformer unified and renamed it (2017).</b> Vaswani et al. took these scattered ingredients — a query, content-addressed keys, separate values — and compressed them into one crisp formula, <code>softmax(QKᵀ/√d)V</code>, then did the genuinely new thing: made <span class="pill q">Q</span>, <span class="pill k">K</span>, <span class="pill v">V</span> three <em>learned linear projections of the same sequence</em>, so a sequence could attend to <em>itself</em> (self-attention). The database metaphor — "a query retrieving from a key-value store" — was already the mental model in memory networks; the Transformer simply adopted its clean nouns.</li>
+</ul>
+So "post hoc" means: the computation was discovered by engineering (fix translation → separate match-from-content → drop recurrence), and only afterwards was it wrapped in the tidy retrieval story that now makes it feel inevitable. The names are a <em>lens</em> on the mechanism, not its origin — which is exactly why this page insists the roles are <b>emergent</b>, not designed.</div>
+
+<div class="box pit"><span class="tag">Reasoned, or stumbled upon? — both</span>
+Self-attention was <b>intuition-guided empiricism</b>, not a derivation:
+<ul class="take" style="margin-top:6px">
+  <li><b>Reasoned:</b> attention was invented to fix a concrete bottleneck — early translation models crushed a whole sentence into one fixed vector, which broke on long inputs; letting the decoder look back at every input word was a targeted fix. The <code>÷√d</code> scaling (stops big dot-products from saturating softmax) and <b>positional encodings</b> (needed because attention is order-blind) were also reasoned patches.</li>
+  <li><b>Stumbled/empirical:</b> dropping recurrence <em>entirely</em> ("attention is all you need") was a bold bet, validated by experiments and ablations — the authors have said they were surprised how well it worked. Head counts and sinusoidal-vs-learned position were tuned empirically. The clean Q/K/V story was a <em>post-hoc</em> abstraction borrowed from retrieval.</li>
+</ul>
+The lesson: deep-learning ideas are usually engineered against bottlenecks and kept because they <em>scale</em>, then explained cleanly afterwards.</div>
+
+<!-- ============ 9. WHY Q AND K ARE NOT INTERCHANGEABLE ============ -->
+<h2 id="whyqk" class="anchor"><span class="n">9</span>Why Q and K are <em>not</em> interchangeable</h2>
+<p class="sub">The deepest question on this page: if the score is <code>s = Q·K</code> and multiplication is commutative, what stops query and key from being the same thing? Four honest layers.</p>
+
+<div class="box key"><span class="tag">Layer 0 — you're right about the multiply</span>
+For a single pair, <code>Q·K = K·Q</code>. The dot product <b>is</b> symmetric. So the distinction between query and key <b>cannot</b> come from the multiplication itself. Good — hold onto that. The answer is that the multiply sits inside an <em>asymmetric machine</em>.</div>
+
+<div class="box def"><span class="tag">Layer 1 — swapping the matrices transposes the scores</span>
+Swap the whole matrices, <code>W_Q ↔ W_K</code>. Then every score flips its indices: the new <code>S</code> is the <b>transpose</b> of the old one (<code>S → Sᵀ</code>), because <code>Q_i·K_j</code> becomes <code>K_i·Q_j = (old S)_{ji}</code>. So the two matrices are interchangeable <b>only if the attention pattern you want is symmetric</b> (<code>S = Sᵀ</code>). Language is full of <em>directional</em> relations — a pronoun points back to its antecedent, a verb to its subject, a word to the one before it — none of which are mutual. Directionality alone already forbids <code>W_Q = W_K</code>.</div>
+
+<div class="box def"><span class="tag">Layer 1 in full — the transpose, with indices</span>
+Write everything with indices. With <code>Q = X·W_Q</code> and <code>K = X·W_K</code>, the score matrix is
+<div class="eq center" style="margin:8px 0">S<sub>ij</sub> = <span class="hl-q">Q<sub>i</sub></span> · <span class="hl-k">K<sub>j</sub></span> = Σ<sub>d</sub> Q<sub>i,d</sub> K<sub>j,d</sub></div>
+Read the matrix by axis: <b>row i</b> of S is "<b>token i as a query</b>, scanning every key"; <b>column j</b> is "<b>token j as a key</b>, scanned by every query." Attention of token i = softmax across <em>its row</em>.
+<br><br>Now swap the two matrices — set <code>W_Q' = W_K</code>, <code>W_K' = W_Q</code>. Then <code>Q'<sub>i</sub> = X<sub>i</sub>W_K = K<sub>i</sub></code> and <code>K'<sub>j</sub> = X<sub>j</sub>W_Q = Q<sub>j</sub></code>, so
+<div class="eq center" style="margin:8px 0">S'<sub>ij</sub> = Q'<sub>i</sub>·K'<sub>j</sub> = <span class="hl-k">K<sub>i</sub></span>·<span class="hl-q">Q<sub>j</sub></span> = Q<sub>j</sub>·K<sub>i</sub> = S<sub>ji</sub>&nbsp;&nbsp;⟹&nbsp;&nbsp;S' = Sᵀ</div>
+Swapping the weight matrices <b>transposes the whole score matrix</b> — it turns every "i looks at j" into "j looks at i."
+<div class="mrow" style="margin-top:12px">
+  <div class="mbox"><div class="lbl">S (token i attends? — row 0 highlighted)</div>
+    <div class="mgrid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="cell" style="background:color-mix(in srgb,var(--q) 35%,var(--code))">2</div><div class="cell" style="background:color-mix(in srgb,var(--q) 35%,var(--code))">5</div><div class="cell" style="background:color-mix(in srgb,var(--q) 35%,var(--code))">1</div>
+      <div class="cell">0</div><div class="cell">2</div><div class="cell">4</div>
+      <div class="cell">3</div><div class="cell">0</div><div class="cell">2</div>
+    </div><div class="note">row 0 = [2, <b>5</b>, 1] → token 0 attends <b>token 1</b></div></div>
+  <div class="mbox"><div class="lbl">Sᵀ (after swapping Q↔K)</div>
+    <div class="mgrid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="cell" style="background:color-mix(in srgb,var(--k) 35%,var(--code))">2</div><div class="cell" style="background:color-mix(in srgb,var(--k) 35%,var(--code))">0</div><div class="cell" style="background:color-mix(in srgb,var(--k) 35%,var(--code))">3</div>
+      <div class="cell">5</div><div class="cell">2</div><div class="cell">0</div>
+      <div class="cell">1</div><div class="cell">4</div><div class="cell">2</div>
+    </div><div class="note">row 0 = [2, 0, <b>3</b>] → token 0 now attends <b>token 2</b></div></div>
+</div>
+<b>The point in one line:</b> unless <code>S = Sᵀ</code> (a symmetric attention pattern), the transpose is a <em>different</em> matrix, so swapping Q and K computes a different — wrong — set of attentions. Directional tasks need <code>S ≠ Sᵀ</code>, which is exactly when the two matrices are pinned to distinct, non-interchangeable roles. And because row i is trained by token i's error while column j is trained by token j's error, the same index asymmetry that transposes <code>S</code> is what hands Q and K different gradients (Section 9, Layer 2).</div>
+
+<div class="box def"><span class="tag">Layer 2 — the asymmetric machine (the real answer)</span>
+The dot product is wrapped in two operations that treat query and key <em>differently</em>:
+<ul class="take" style="margin:6px 0">
+  <li><b>(a) softmax runs over keys, per query.</b> Each <em>query</em> row becomes its own probability distribution over the keys. Rows get normalized; columns do not. Query indexes <em>which</em> distribution; key competes <em>within</em> it.</li>
+  <li><b>(b) the value is attached to the key's position:</b> <code>O_i = Σ_j A_ij V_j</code>. The content that flows out belongs to the <em>key/value</em> token <code>j</code>. So key and value are the <b>source</b> side; query is the <b>destination</b> side.</li>
+</ul>
+Put (a) and (b) together and you get the crux ↓</div>
+
+<div class="box key"><span class="tag">Layer 2, the crux — Q and K are wired into different outputs</span>
+<div class="mrow">
+  <div class="mbox"><div class="lbl">click a token — see where its Q and K plug in</div>
+    <div id="rc-grid" class="mgrid rc" style="grid-template-columns:repeat(3,1fr)"></div>
+    <div class="stepbar" style="margin-top:10px">
+      <button id="rc-0">token 0</button><button id="rc-1">token 1</button><button id="rc-2">token 2</button>
+    </div>
+  </div>
+  <div class="rolecols" style="flex:1;min-width:260px">
+    <div class="rcard"><h4><span class="pill q">Q_A</span> = one <b>row</b></h4><span class="note">appears only in token A's own row → shapes <b>only O_A</b> (A's own output). "What do I gather for myself?"</span></div>
+    <div class="rcard"><h4><span class="pill k">K_A</span> = one <b>column</b></h4><span class="note">appears in every token's row → shapes <b>every other O_i</b> (how findable A is). "How do others match me?"</span></div>
+    <div class="rcard"><h4><span class="pill v">V_A</span> = a <b>column</b> too</h4><span class="note">delivered to everyone who attends A → source-side content. "What do I hand over when found?"</span></div>
+  </div>
+</div>
+<p class="narrate" id="rc-note">Token A's <b>query</b> is used <em>once</em> (its own row); its <b>key</b> is used <em>n times</em> (its whole column, read by everyone). Same multiply, opposite wiring.</p></div>
+
+<div class="box def"><span class="tag">…so their gradients come from different places</span>
+Push the loss backward and the wiring shows up as different sums:
+<div class="eq center" style="margin:10px 0">
+∂L/∂<span class="hl-q">Q_A</span> = Σ<sub>j</sub> (∂L/∂S<sub>Aj</sub>)·K<sub>j</sub> &nbsp;←&nbsp; A's <b>own row</b>; blame from <b>O_A only</b><br><br>
+∂L/∂<span class="hl-k">K_A</span> = Σ<sub>i</sub> (∂L/∂S<sub>iA</sub>)·Q<sub>i</sub> &nbsp;←&nbsp; the <b>whole column</b>; blame from <b>every O_i</b>
+</div>
+<code>Q_A</code>'s gradient sums over its own row and traces to a <em>single</em> output. <code>K_A</code>'s gradient sums over its entire column and <em>aggregates blame from every token</em>. Different sources of blame → different corrections → different learned functions. <b>The multiply is symmetric; the wiring is not, and gradients follow the wiring.</b></div>
+
+<div class="box intu"><span class="tag">The vivid version — a speed-dating night</span>
+<ul class="take" style="margin-top:4px">
+  <li>Your <span class="pill q">query</span> is your private <b>wishlist</b> ("someone funny"). You consult it <em>once</em> — to choose your own dates. Only <em>your</em> outcomes grade it; a bad night makes <em>you</em> revise <em>your</em> wishlist.</li>
+  <li>Your <span class="pill k">key</span> is the <b>bio pinned to your chest</b>. <em>Everyone</em> reads it to decide whether to approach you. If ten people misjudge you, all <em>ten</em> bad interactions send corrections to your bio.</li>
+  <li>Your <span class="pill v">value</span> is <b>who you actually are</b> on a date — graded only by the people who picked you.</li>
+</ul>
+Even if your wishlist and your bio held identical words today, they'd be corrected in <em>different directions</em> tomorrow — one judged by your experience, the other by the whole room's. <b>That divergence of feedback is the specialization.</b></div>
+
+<div class="box link"><span class="tag">Layer 3 — naming vs necessity</span>
+"Query = looks-for-what, key = advertises-what" are the emergent <em>descriptions</em> of the destination-side and source-side matrices. <b>Which</b> physical matrix you call "the query" is a relabelling convention (swap them and transpose every pattern → an equivalent model). That they must be <b>different functions</b> is forced — by the asymmetric wiring (Layer 2) plus a directional objective (Layer 1). Section P4 showed their gradients differ in <em>value</em>; this section is why they differ in <em>job</em>.</div>
+
+<!-- ============ 10. POSITION ============ -->
+<h2 id="position" class="anchor"><span class="n">10</span>How is position encoded?</h2>
+<p class="sub">We kept saying "K encodes which position I am." Time to justify that — and to show how <em>real</em> models get position, because it is not free.</p>
+
+<div class="box def"><span class="tag">In the toy, position IS the input</span>
+Our tokens had <b>one-hot</b> embeddings — <code>x₀ = [1,0]</code>, <code>x₁ = [0,1]</code>. Those are not word meanings; they are pure <em>identity tags</em>: <code>[1,0]</code> literally says "I am slot 0." Because the input is one-hot, multiplying by a matrix just <b>selects a row</b>, so:
+<div class="eq center" style="margin:8px 0"><span class="hl-q">Q_i</span> = row i of W_Q &nbsp;&nbsp;&nbsp; <span class="hl-k">K_j</span> = row j of W_K</div>
+i.e. <code>W_K</code> is a <b>lookup table</b> with one key vector per position. "K encodes which position I am" just means training fills those rows with a distinct label per slot. Nothing <em>discovers</em> position — the one-hot input hands it over, and the matrix learns a label for it.</div>
+
+<div class="box pit"><span class="tag">Real models must INJECT position — it isn't free</span>
+Real token embeddings carry <em>word meaning</em> ("cat"), which says nothing about <em>where</em> the word sits. And plain self-attention is <b>permutation-equivariant</b>: shuffle the words and you get the same set of outputs — it genuinely cannot tell slot 3 from slot 10. So position has to be added on purpose:
+<ul class="take" style="margin-top:6px">
+  <li><b>Absolute sinusoidal</b> (original Transformer): a fixed position-dependent vector is <em>added</em> to each embedding — <code>PE_p[2i]=sin(p/10000^{2i/d})</code>, <code>PE_p[2i+1]=cos(…)</code>. Now <code>x</code> carries both "what word" and "which slot."</li>
+  <li><b>Rotary / relative (RoPE)</b>, used by most modern LLMs: <em>rotate</em> Q and K by an angle proportional to position, so <code>Q_i·K_j</code> depends on the <b>distance</b> <code>i−j</code>. This is how models learn "attend to the previous token" or "look 3 back."</li>
+</ul></div>
+
+<div class="box ex"><span class="tag">Position as an angle on a circle</span>
+The next exercise uses 2-D sinusoidal encodings: position <code>p</code> becomes the point <code>[cos(pθ), sin(pθ)]</code> — a step of angle <code>θ</code> around a circle. "Look one position back" then becomes, literally, "rotate my angle back by <code>θ</code>."
+<div style="text-align:center;margin-top:10px"><svg viewBox="0 0 260 150" width="300" role="img" aria-label="positions as points on a circle">
+  <circle cx="130" cy="80" r="55" fill="none" stroke="var(--line)" stroke-width="1.4"/>
+  <line x1="130" y1="80" x2="185" y2="80" stroke="var(--q)" stroke-width="2"/>
+  <line x1="130" y1="80" x2="165" y2="38" stroke="var(--q)" stroke-width="2"/>
+  <line x1="130" y1="80" x2="120" y2="26" stroke="var(--q)" stroke-width="2"/>
+  <circle cx="185" cy="80" r="4" fill="var(--k)"/><text x="192" y="84" font-size="11" fill="var(--ink)" font-family="ui-monospace,monospace">p=0</text>
+  <circle cx="165" cy="38" r="4" fill="var(--k)"/><text x="170" y="34" font-size="11" fill="var(--ink)" font-family="ui-monospace,monospace">p=1</text>
+  <circle cx="120" cy="26" r="4" fill="var(--k)"/><text x="86" y="26" font-size="11" fill="var(--ink)" font-family="ui-monospace,monospace">p=2</text>
+  <text x="150" y="66" font-size="11" fill="var(--muted)" font-family="ui-monospace,monospace">θ</text>
+</svg></div></div>
+
+<!-- ============ 11. EXERCISE ============ -->
+<h2 id="exercise" class="anchor"><span class="n">11</span>Exercise: gradient descent, step by step</h2>
+<p class="sub">A real training loop you can run by clicking. Watch W_Q and W_K start nearly identical and specialize into distinct query vs key behaviour — on a realistic positional task.</p>
+
+<div class="box def"><span class="tag">The task — "attend to the previous token"</span>
+3 tokens with sinusoidal positions <code>PE_p=[cos(pθ),sin(pθ)]</code>, <code>θ=50°</code>. Values fixed (<code>W_V=I</code>), so the output <code>O = A·X</code>. Target: each token should output the <em>previous</em> token's encoding — token 1→token 0, token 2→token 1, token 0→itself. That target attention is the <b>sub-diagonal</b> <code>[[1,0,0],[1,0,0],[0,1,0]]</code>. We train only <code>W_Q, W_K</code> from a near-identical start.
+<br><br><b>Why it forces Q≠K:</b> with <code>Q=K</code> the scores are symmetric (<code>score(p,j)=score(j,p)</code>), so "2 attends 1" would force "1 attends 2" — but 1 must attend 0. A symmetric scorer literally cannot look backward. The objective has no choice but to pull the two matrices apart.</div>
+
+<div class="card">
+  <div class="stepbar">
+    <button class="primary" id="ex-run">▶ Run</button>
+    <button id="ex-stepbtn">Step ▸</button>
+    <button id="ex-reset">Reset</button>
+    <span class="chip">step <b id="ex-step">0</b>/400</span>
+    <span class="chip">loss <b id="ex-loss">–</b></span>
+    <span class="chip">‖W_Q−W_K‖ <b id="ex-diff">–</b></span>
+  </div>
+  <div class="mrow">
+    <div class="mbox"><div class="lbl">W_Q (query lens)</div><div id="ex-WQ" class="mgrid" style="grid-template-columns:repeat(2,1fr)"></div></div>
+    <div class="mbox"><div class="lbl">W_K (key lens)</div><div id="ex-WK" class="mgrid" style="grid-template-columns:repeat(2,1fr)"></div></div>
+    <div class="mbox"><div class="lbl">∂L/∂W_Q</div><div id="ex-dWQ" class="mgrid" style="grid-template-columns:repeat(2,1fr)"></div></div>
+    <div class="mbox"><div class="lbl">∂L/∂W_K</div><div id="ex-dWK" class="mgrid" style="grid-template-columns:repeat(2,1fr)"></div></div>
+  </div>
+  <div class="mrow">
+    <div class="mbox"><div class="lbl">S = Q·Kᵀ (scores)</div><div id="ex-S" class="mgrid" style="grid-template-columns:repeat(3,1fr)"></div></div>
+    <div class="mbox"><div class="lbl">A = softmax(S) — outline = target</div><div id="ex-A" class="mgrid agrid" style="grid-template-columns:repeat(3,1fr)"></div></div>
+    <div class="mbox"><div class="lbl">‖W_Q − W_K‖ over training</div><canvas id="ex-curve" width="300" height="150"></canvas></div>
+  </div>
+  <p class="narrate" id="ex-narrate">Press <b>Run</b> (or tap <b>Step</b> to go one gradient step at a time).</p>
+</div>
+
+<div class="box ex"><span class="tag">Step 1, worked out by hand (verified numerically)</span>
+Starting <code>W_Q=[[1.02, 0.03],[−0.01, 1.00]]</code>, <code>W_K=[[0.98, −0.01],[0.02, 1.01]]</code> (near-identical), the first forward+backward gives:
+<table class="data" style="margin-top:8px">
+  <tr><th>quantity</th><th>value</th></tr>
+  <tr><td class="mono">A = softmax(S)</td><td class="mono">[[.487, .354, .159], [.282, .419, .299], [.152, .346, .502]]  ← blurry, near-uniform</td></tr>
+  <tr><td class="mono">loss</td><td class="mono">1.036</td></tr>
+  <tr><td class="mono">∂L/∂W_Q</td><td class="mono">[[−.442, .460], [−.450, .366]]</td></tr>
+  <tr><td class="mono">∂L/∂W_K</td><td class="mono">[[−.464, −.480], [.456, .371]]</td></tr>
+  <tr><td class="mono">‖∂L/∂W_Q − ∂L/∂W_K‖</td><td class="mono">1.306  ← already different ⇒ they separate on step 1</td></tr>
+</table>
+The gradients on the two matrices differ from the very first step, so they immediately diverge — exactly the wiring asymmetry of Section 9 in action.</div>
+
+<div class="box key"><span class="tag">What converges — the payoff</span>
+After ~400 steps: loss ≈ <b>0.001</b>, attention becomes the sub-diagonal (each token attends the previous one), and <b>‖W_Q−W_K‖ grows from 0.07 to ≈ 3.95</b>. Checking the learned vectors, <b>Q₁ aligns with K₀ (cosine 0.99) and Q₂ with K₁ (cosine 1.00)</b> — each token's query points exactly at the previous token's key. In the clean gauge that is <b>K = "here is my position", Q = "rotate my position back by one"</b> — literally the RoPE mechanism for relative-position attention. Query and key started as twins and the task alone split them into a <em>position label</em> and a <em>position shifter</em>.</div>
+
+<h2 id="faq" class="anchor"><span class="n">12</span>Common misconceptions, answered</h2>
 <div class="card faq">
   <details><summary>“So engineers decided which matrix is the query?”</summary>
   No. All three matrices start as near-identical random numbers. Training grinds them into different shapes; we attach the labels “query/key/value” afterwards to describe what they ended up doing. If you re-ran training with the labels swapped at the start, you’d get an equivalent model — the labels are arbitrary, the <em>distinctness</em> is what matters.</details>
@@ -480,7 +697,7 @@ This is also why <b>independently trained models keep discovering the same roles
 </div>
 
 <!-- ============ GLOSSARY ============ -->
-<h2 id="glossary" class="anchor"><span class="n">9</span>Glossary &amp; takeaways</h2>
+<h2 id="glossary" class="anchor"><span class="n">13</span>Glossary &amp; takeaways</h2>
 <table class="data">
   <tr><th>Symbol</th><th>Name</th><th>Meaning</th></tr>
   <tr><td class="mono">x</td><td>embedding</td><td>a token turned into a list of numbers</td></tr>
@@ -492,6 +709,10 @@ This is also why <b>independently trained models keep discovering the same roles
   <tr><td class="mono">L</td><td>loss</td><td>one number grading how wrong the prediction was</td></tr>
   <tr><td class="mono">∂L/∂w</td><td>gradient</td><td>slope of error vs. a weight; the “blame” signal</td></tr>
   <tr><td class="mono">η</td><td>learning rate</td><td>how big a step to take against the gradient</td></tr>
+  <tr><td class="mono">PE<sub>p</sub></td><td>positional encoding</td><td>a vector that tags position p; sinusoidal <code>[cos(pθ),sin(pθ)]</code> here</td></tr>
+  <tr><td class="mono">Sᵀ</td><td>transpose of S</td><td>rows↔columns; equals the scores you'd get by swapping Q and K</td></tr>
+  <tr><td>—</td><td>permutation-equivariant</td><td>reorder the inputs → same outputs reordered; why position must be injected</td></tr>
+  <tr><td>—</td><td>RoPE</td><td>rotary positional encoding: rotate Q,K by an angle ∝ position so scores depend on distance</td></tr>
 </table>
 
 <div class="card">
@@ -641,6 +862,95 @@ This is also why <b>independently trained models keep discovering the same roles
   document.getElementById('reset').addEventListener('click',reset);
   lr.addEventListener('input',()=>{recompute();progress=STEPS;draw();});
   window.addEventListener('resize',()=>{drawHeat();draw();});
+  reset();
+})();
+</script>
+
+<script>
+/* ===== Section 9: which output does Q_A / K_A feed? (row vs column) ===== */
+(function(){
+  const el=document.getElementById('rc-grid'), note=document.getElementById('rc-note');
+  if(!el) return;
+  const cells=[];
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++){
+    const d=document.createElement('div'); d.className='cell'; d.style.minWidth='46px';
+    d.textContent=i+'→'+j; d.dataset.i=i; d.dataset.j=j; el.appendChild(d); cells.push(d);
+  }
+  function highlight(A){
+    cells.forEach(d=>{
+      const i=+d.dataset.i, j=+d.dataset.j; d.className='cell';
+      const isRow=(i===A), isCol=(j===A);
+      if(isRow&&isCol) d.className='cell both';
+      else if(isRow) d.className='cell row';
+      else if(isCol) d.className='cell col';
+    });
+    note.innerHTML='Token '+A+"'s <b class='hl-q'>query</b> lives in <b>row "+A+"</b> (blue) — it shapes only <b>O_"+A+
+      "</b>, token "+A+"'s own output. Its <b class='hl-k'>key</b> lives in <b>column "+A+
+      "</b> (orange) — it shapes <b>every</b> token's output (how much each one attends to "+A+
+      "). Same multiply, opposite wiring — so their gradients come from different places.";
+  }
+  document.getElementById('rc-0').onclick=()=>highlight(0);
+  document.getElementById('rc-1').onclick=()=>highlight(1);
+  document.getElementById('rc-2').onclick=()=>highlight(2);
+  highlight(2);
+})();
+
+/* ===== Section 11: positional-encoding gradient-descent exercise ===== */
+(function(){
+  const stepEl=document.getElementById('ex-step'); if(!stepEl) return;
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const TH=50*Math.PI/180;
+  const PE=[0,1,2].map(p=>[Math.cos(p*TH),Math.sin(p*TH)]);
+  const X=PE, Ostar=[PE[0],PE[0],PE[1]], LR=0.8, STEPS=400;
+  const WQ0=[[1.02,0.03],[-0.01,1.00]], WK0=[[0.98,-0.01],[0.02,1.01]];
+
+  function mul(A,B){const r=A.length,k=B.length,c=B[0].length,O=[];
+    for(let i=0;i<r;i++){O[i]=[];for(let j=0;j<c;j++){let s=0;for(let t=0;t<k;t++)s+=A[i][t]*B[t][j];O[i][j]=s;}}return O;}
+  const tr=A=>A[0].map((_,j)=>A.map(r=>r[j]));
+  const sub=(A,B)=>A.map((r,i)=>r.map((v,j)=>v-B[i][j]));
+  const scl=(A,s)=>A.map(r=>r.map(v=>v*s));
+  const clone=A=>A.map(r=>r.slice());
+  const fro=A=>Math.sqrt(A.reduce((s,r)=>s+r.reduce((t,v)=>t+v*v,0),0));
+  function smrows(M){return M.map(r=>{const m=Math.max(...r);const e=r.map(v=>Math.exp(v-m));const z=e.reduce((a,b)=>a+b,0);return e.map(v=>v/z);});}
+
+  function forward(WQ,WK){const Q=mul(X,WQ),K=mul(X,WK),S=mul(Q,tr(K)),A=smrows(S),O=mul(A,X);
+    const L=O.reduce((s,r,i)=>s+r.reduce((t,v,j)=>t+(v-Ostar[i][j])**2,0),0);return{Q,K,S,A,O,L};}
+  function backward(f){const dO=scl(sub(f.O,Ostar),2), dA=mul(dO,tr(X));
+    const dS=f.A.map((a,i)=>{const dot=a.reduce((s,v,j)=>s+dA[i][j]*v,0);return a.map((v,j)=>v*(dA[i][j]-dot));});
+    const dWQ=mul(tr(X),mul(dS,f.K)), dWK=mul(tr(X),mul(tr(dS),f.Q));return{dWQ,dWK};}
+
+  let WQ,WK,step,diffs,anim=null;
+  const cv=document.getElementById('ex-curve'), ctx=cv.getContext('2d');
+  const $=id=>document.getElementById(id);
+  const tgt={'0,0':1,'1,0':1,'2,1':1};
+
+  function grid(el,M,dec){el.innerHTML='';M.forEach(row=>row.forEach(v=>{const d=document.createElement('div');d.className='cell';d.textContent=v.toFixed(dec);el.appendChild(d);}));}
+  function gridA(el,M){el.innerHTML='';M.forEach((row,i)=>row.forEach((v,j)=>{const d=document.createElement('div');d.className='cell'+(tgt[i+','+j]?' tgt':'');d.style.background='rgba(18,161,80,'+(0.12+0.82*v).toFixed(3)+')';d.textContent=v.toFixed(2);el.appendChild(d);}));}
+
+  function drawCurve(){const W=cv.width,H=cv.height,pad=30;ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle=css('--line');ctx.fillStyle=css('--muted');ctx.font='10px ui-monospace,monospace';ctx.lineWidth=1;
+    for(let g=0;g<=4;g++){const y=H-pad-(g/4)*(H-pad-6);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-6,y);ctx.stroke();ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(g,pad-4,y);}
+    ctx.strokeStyle=css('--q');ctx.lineWidth=2.4;ctx.beginPath();
+    diffs.forEach((d,i)=>{const x=pad+(i/STEPS)*(W-pad-6),y=H-pad-(d/4)*(H-pad-6);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();}
+
+  function render(){const f=forward(WQ,WK);const bk=backward(f);const diff=fro(sub(WQ,WK));
+    stepEl.textContent=step; $('ex-loss').textContent=f.L.toFixed(3); $('ex-diff').textContent=diff.toFixed(2);
+    grid($('ex-WQ'),WQ,2);grid($('ex-WK'),WK,2);grid($('ex-dWQ'),bk.dWQ,2);grid($('ex-dWK'),bk.dWK,2);
+    grid($('ex-S'),f.S,2);gridA($('ex-A'),f.A);drawCurve();
+    const A=f.A, back=A.map(r=>r.indexOf(Math.max(...r)));
+    let msg;
+    if(step===0) msg="Nearly identical lenses (‖W_Q−W_K‖="+diff.toFixed(2)+"). Attention is blurry — every token spreads ~evenly. Press Step or Run.";
+    else if(step<STEPS) msg="Diverging: ‖W_Q−W_K‖="+diff.toFixed(2)+". Attention rows are sharpening toward the sub-diagonal (target). Who each token attends now: ["+back.join(', ')+"] vs target [0, 0, 1].";
+    else msg="Converged. Attention is the sub-diagonal — each token attends the PREVIOUS one. ‖W_Q−W_K‖≈"+diff.toFixed(2)+": the twins fully specialized. K became a position label; Q became 'rotate my position back by one' (Q_p lands on K_{p−1}) — the RoPE mechanism.";
+    $('ex-narrate').innerHTML=msg;
+    return bk;}
+
+  function doStep(){const bk=backward(forward(WQ,WK));WQ=sub(WQ,scl(bk.dWQ,LR));WK=sub(WK,scl(bk.dWK,LR));step++;diffs.push(fro(sub(WQ,WK)));}
+  function reset(){if(anim)cancelAnimationFrame(anim);WQ=clone(WQ0);WK=clone(WK0);step=0;diffs=[fro(sub(WQ,WK))];render();}
+  function run(){if(anim)cancelAnimationFrame(anim);const tick=()=>{for(let n=0;n<3&&step<STEPS;n++)doStep();render();if(step<STEPS)anim=requestAnimationFrame(tick);};tick();}
+  $('ex-run').onclick=run; $('ex-reset').onclick=reset;
+  $('ex-stepbtn').onclick=()=>{if(step<STEPS){doStep();render();}};
+  window.addEventListener('resize',()=>{if(diffs)drawCurve();});
   reset();
 })();
 </script>
