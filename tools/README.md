@@ -41,13 +41,15 @@ It needs `ffmpeg` on `PATH` and `pip3 install 'faster-whisper>=1.0'`, and it dow
 
 ### When YouTube blocks the fetch
 
-YouTube rejects requests from datacenter IP ranges:
+From cloud and datacenter networks you will usually see:
 
 ```
 ERROR: [youtube] <id>: Sign in to confirm you're not a bot.
 ```
 
-This is not a bug in the tool — it is where the request came from. Options, in order of preference:
+This is not a bug in the tool, and it is not about how the request is dressed up. The block is applied to the **egress IP**: the watch page answers `302` to `google.com/sorry` — Google's "unusual traffic" CAPTCHA — so yt-dlp, `curl`, and a real headless browser with a genuine fingerprint and consent cookies all fail the same way. `/api/timedtext` looks more promising because it answers `200`, but the body is empty: it needs signed parameters that only come from the player response on the page you cannot load.
+
+So a better user agent will not fix it. Options, in order of preference:
 
 1. Run it from an ordinary network connection.
 2. Pass cookies from a signed-in browser, per the [yt-dlp FAQ](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp).
