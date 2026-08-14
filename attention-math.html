@@ -254,7 +254,8 @@
       <li><a href="#s8">The formula, assembled</a></li>
       <li><a href="#s9">Many heads at once</a></li>
       <li><a href="#s10">Where the matrices come from</a></li>
-      <li><a href="#s11">What the video leaves out</a></li>
+      <li><a href="#s11">How the transpose splits them apart</a></li>
+      <li><a href="#s12">What the video leaves out</a></li>
     </ol>
   </nav>
 
@@ -542,10 +543,84 @@
 
   <!-- ───────────────────────────────────────────────────────────────── 11 -->
   <section id="s11">
-    <h2 class="display"><span class="step">Step 11 · Deltas</span>What the video leaves out</h2>
+    <h2 class="display"><span class="step">Step 11 · Blame</span>How the transpose splits them apart</h2>
+    <p class="deck">Step six said <span class="pen q">W<sub>Q</sub></span> and <span class="pen k">W<sub>K</sub></span> are independent. This is how gradient descent makes them <i>behave</i> differently — and here the transpose really is doing the work.</p>
+    <div class="col">
+      <p>Learning needs one thing from every weight: how much it contributed to the mistake. Work backwards from the loss and that question reaches the score matrix first, as a grid the same shape as <code><span class="pen q">Q</span><span class="pen k">K</span>ᵀ</code>. Call it <code>G</code>. For a softmax followed by cross-entropy it takes a famously simple form:</p>
+    </div>
+
+    <div class="formula">G = A − A*  &nbsp;&nbsp;<span style="color:var(--muted);font-size:.85rem">(what the model attended to, minus what it should have)</span></div>
+
+    <div class="col">
+      <p>Every entry of <code>G</code> is a small instruction: <i>the weight token i placed on token j was this much too high, or too low</i>. Now that blame has to reach <span class="pen q">Q</span> and <span class="pen k">K</span>, and both fed the same grid. Here is the split:</p>
+    </div>
+
+    <div class="formula">∂L/∂<span class="pen q">Q</span> = G·<span class="pen k">K</span> &nbsp;&nbsp;&nbsp;&nbsp; ∂L/∂<span class="pen k">K</span> = <b>G</b><b>ᵀ</b>·<span class="pen q">Q</span></div>
+
+    <div class="col">
+      <p>That transpose is not decoration, and it is the answer to the question this section exists for. Read what it means one index at a time:</p>
+      <ul class="plain">
+        <li><b>Row <i>i</i> of G</b> is everything token <i>i</i> got wrong <i>about who it looked at</i>. Without the transpose, <span class="pen q">Q</span> collects along rows — so a query vector is corrected by <b>the words it looked at</b>.</li>
+        <li><b>Column <i>j</i> of G</b> is everything <i>everyone</i> got wrong <i>about looking at token j</i>. The transpose makes <span class="pen k">K</span> collect along columns — so a key vector is corrected by <b>all the words that looked at it</b>.</li>
+      </ul>
+      <p>One vector per token in each case, but assembled from perpendicular slices of the same grid. A query is answerable to one word's needs. A key is answerable to the whole sentence's demands on it. Those are different jobs, and they produce different vectors — which is exactly the behavioural difference you would expect from the two roles.</p>
+      <p>From there the last hop is ordinary: <code>∂L/∂W<sub>Q</sub> = Xᵀ(∂L/∂<span class="pen q">Q</span>)</code>, and likewise for <span class="pen k">W<sub>K</sub></span>. Each matrix is nudged a little against its own gradient, a few hundred thousand times.</p>
+
+      <h3>They cannot stay the same, even if you force them to start identical</h3>
+      <p>Here is the sharpest version of the argument. Set <code>W<sub>Q</sub> = W<sub>K</sub></code> exactly — same numbers, perfectly tied. If the two gradients were equal, the updates would be equal, and they would stay tied forever.</p>
+      <p>They are not equal, because <code>G</code> is not symmetric. <code>G·K</code> and <code>Gᵀ·K</code> differ the moment <code>G ≠ Gᵀ</code>, and there is no reason for a grid of prediction errors to be its own mirror image. So the matrices come apart on the very first step and keep going.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 7 · Trained apart from a tied start</span>
+        <span class="hint">Step it, or let it run</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Training controls">
+          <button class="ctl" id="tr-step">Step ×1</button>
+          <button class="ctl" id="tr-run">Run 200</button>
+          <button class="ctl" id="tr-tied" aria-pressed="true">Reset — tied start</button>
+          <button class="ctl" id="tr-rand" aria-pressed="false">Reset — random start</button>
+          <button class="ctl" id="tr-nopos" aria-pressed="false">Drop position</button>
+        </div>
+        <div class="plotwrap"><canvas id="trainlab" height="330" aria-label="Attention matrix converging to target, with loss and matrix-difference curves"></canvas></div>
+        <dl class="readout">
+          <div><dt>Step</dt><dd id="ro-step" class="num">0</dd></div>
+          <div><dt>Loss</dt><dd id="ro-loss" class="num">—</dd></div>
+          <div><dt>‖W<sub>Q</sub> − W<sub>K</sub>‖</dt><dd id="ro-sep" class="num">—</dd></div>
+        </dl>
+      </div>
+      <figcaption>The task: every token should attend to the <b>next</b> one — a target no symmetric score matrix can express. Starting tied, the separation is exactly <code>0.00</code>; a single step breaks it to <code>0.37</code>, and it climbs past <code>6.9</code> while the loss falls to about <code>0.0004</code> and the attention grid lands exactly on the outlined target. Nobody asked the two matrices to differ — the transposed gradient did it. The bump in the loss partway through is real, not a rendering artefact: the run passes through an unstable patch before settling. <b>Drop position</b> removes the two positional features and the run stalls at <code>1.2312</code>, just under the random-guess loss of <code>ln 4 ≈ 1.386</code> — “next” is not a fact about meaning, so without position there is nothing to learn.</figcaption>
+    </figure>
+
+    <div class="col">
+      <p>One honest caveat: the divergence needs a task that <i>rewards</i> asymmetry. This one is directional by construction. Give a model a perfectly symmetric objective and the two matrices would have no particular reason to separate — the mechanism permits difference, and the task is what demands it.</p>
+      <p>The figure below is the same grid of blame from a single training step, read the two ways.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 8 · One grid, two readings</span>
+        <span class="hint">Switch which matrix is collecting</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Choose which matrix collects the blame">
+          <button class="ctl" id="bl-q" aria-pressed="true">W<sub>Q</sub> collects rows</button>
+          <button class="ctl" id="bl-k" aria-pressed="false">W<sub>K</sub> collects columns</button>
+        </div>
+        <div class="plotwrap"><canvas id="blame" height="330" aria-label="Score-gradient grid highlighted by row or by column"></canvas></div>
+      </div>
+      <figcaption>The grid is <code>G = A − A*</code> at the current training step of Figure 7 — warm means the model attended too much, cool means too little. The values never change between the two views. Only the direction they are gathered in does, and that single difference is what gives a query and a key their distinct behaviour.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── 12 -->
+  <section id="s12">
+    <h2 class="display"><span class="step">Step 12 · Deltas</span>What the video leaves out</h2>
     <p class="deck">The simplifications are the right ones for a first pass. They are still simplifications, and each one bites eventually.</p>
     <ul class="plain">
-      <li><b>Position is nowhere.</b> Everything above is order-blind — shuffle the sentence and the arithmetic gives the same answer. Real transformers add positional information to the embeddings before attention runs, which is the only reason “dog bites man” differs from “man bites dog”.</li>
+      <li><b>Position is nowhere.</b> Everything above is order-blind — shuffle the sentence and the arithmetic gives the same answer. Real transformers add positional information to the embeddings before attention runs, which is the only reason “dog bites man” differs from “man bites dog”. Figure 7's <b>Drop position</b> control shows the cost directly: the same training run that reaches near-zero loss with two positional features cannot get below random guessing without them.</li>
       <li><b>No causal mask.</b> Here every word sees every other word. A model generating text must not see the future, so the scores above the diagonal are set to −∞ before the softmax, making their weights exactly zero.</li>
       <li><b>“Moving words through space” is a metaphor.</b> A useful one, and the figures above lean on it — but the operation is a weighted sum of value vectors, and the result lives in the value space, not in the space the words started in. Do not expect to find the original word anywhere near where it appears to land.</li>
       <li><b>The block isn't just attention.</b> Around every attention layer sits a residual connection, a normalisation step, and a feed-forward network. Remove them and deep transformers do not train at all.</li>
@@ -1217,6 +1292,291 @@
     });
 
     register(draw);
+  })();
+
+  /* ══ Figures 7 & 8 · training, and the transposed blame ══════════════
+     A real (if tiny) gradient descent, run in the page. Task: every token
+     attends to the next one — directional by construction, so no symmetric
+     score matrix can express it. Started tied, W_Q and W_K come apart on
+     their own, because G = A − A* is not symmetric and the transpose sends
+     rows to Q and columns to K.                                          */
+  (() => {
+    const trainCanvas = document.getElementById("trainlab");
+    const blameCanvas = document.getElementById("blame");
+    if(!trainCanvas || !blameCanvas) return;
+
+    const NAMES = SENTENCES.a.words;              /* an, apple, and, orange */
+    const N = NAMES.length, DK = 2, LR = 0.5, DIMS = 4;
+    const TARGET = [[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,1]];
+
+    /* Seeded, so the figure tells the same story on every visit. */
+    const rng = seed => {
+      let s = seed >>> 0;
+      return () => {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    const mul = (A, B) => A.map(row => B[0].map((_, j) => row.reduce((s, v, k) => s + v*B[k][j], 0)));
+    const transpose = A => A[0].map((_, j) => A.map(r => r[j]));
+    const softmaxRow = row => {
+      const m = Math.max(...row);
+      const e = row.map(v => Math.exp(v - m));
+      const t = e.reduce((a, b) => a + b, 0);
+      return e.map(v => v/t);
+    };
+
+    /* Two semantic dimensions from the rest of the page, plus two positional
+       ones. "Drop position" zeroes the positional pair rather than reshaping,
+       which starves those weights of gradient — same effect, steady shapes. */
+    const buildX = withPos => NAMES.map((word, i) => {
+      const [a, b] = WORDS[word];
+      return withPos ? [a, b, Math.sin(i*Math.PI/4), Math.cos(i*Math.PI/4)] : [a, b, 0, 0];
+    });
+
+    let X, WQ, WK, step = 0, A = null, G = null, loss = 0, history = [];
+    let startMode = "tied", withPos = true, running = null;
+
+    const separation = () => Math.sqrt(
+      WQ.reduce((s, row, i) => s + row.reduce((t, v, j) => t + (v - WK[i][j])**2, 0), 0));
+
+    const evaluate = () => {
+      const Q = mul(X, WQ), K = mul(X, WK), scale = Math.sqrt(DK);
+      const S = Q.map(q => K.map(k => q.reduce((acc, v, i) => acc + v*k[i], 0)/scale));
+      A = S.map(softmaxRow);
+      loss = 0;
+      for(let i = 0; i < N; i++)
+        for(let j = 0; j < N; j++)
+          if(TARGET[i][j]) loss -= Math.log(A[i][j] + 1e-12);
+      loss /= N;
+      G = A.map((row, i) => row.map((v, j) => (v - TARGET[i][j])/N));
+      return { Q, K };
+    };
+
+    const trainStep = () => {
+      const { Q, K } = evaluate();
+      const scale = Math.sqrt(DK);
+      const dQ = mul(G, K).map(r => r.map(v => v/scale));          /* rows    */
+      const dK = mul(transpose(G), Q).map(r => r.map(v => v/scale)); /* columns */
+      const gWQ = mul(transpose(X), dQ), gWK = mul(transpose(X), dK);
+      for(let i = 0; i < DIMS; i++)
+        for(let j = 0; j < DK; j++){
+          WQ[i][j] -= LR*gWQ[i][j];
+          WK[i][j] -= LR*gWK[i][j];
+        }
+      step++;
+      evaluate();
+      history.push({ step, loss, sep: separation() });
+    };
+
+    const reset = () => {
+      if(running){ clearInterval(running); running = null; }
+      X = buildX(withPos);
+      const r = rng(7);
+      const fresh = () => Array.from({length: DIMS}, () => Array.from({length: DK}, () => (r()*2 - 1)*0.4));
+      WQ = fresh();
+      WK = startMode === "tied" ? WQ.map(row => row.slice()) : fresh();
+      step = 0;
+      evaluate();
+      history = [{ step: 0, loss, sep: separation() }];
+      redraw();
+    };
+
+    /* ── figure 7 ─────────────────────────────────────────────────────── */
+    const drawTrain = () => {
+      const { ctx, w, h } = fit(trainCanvas);
+      ctx.clearRect(0, 0, w, h);
+      ctx.textBaseline = "middle";
+
+      /* left: the attention matrix, with the target outlined */
+      const cell = Math.min((w*0.40 - 76)/N, (h - 92)/N);
+      const gx = 76, gy = 56;
+      for(let i = 0; i < N; i++){
+        for(let j = 0; j < N; j++){
+          const x = gx + j*cell, y = gy + i*cell;
+          ctx.fillStyle = `color-mix(in srgb, ${css("--v")} ${Math.round(A[i][j]*88)}%, ${css("--panel")})`;
+          ctx.fillRect(x, y, cell - 2, cell - 2);
+          if(TARGET[i][j]){
+            ctx.strokeStyle = css("--ink"); ctx.lineWidth = 2;
+            ctx.strokeRect(x + 1, y + 1, cell - 4, cell - 4);
+          }
+          ctx.fillStyle = A[i][j] > .6 ? "#fff" : css("--muted");
+          ctx.font = "600 10px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(A[i][j].toFixed(2), x + cell/2 - 1, y + cell/2);
+        }
+      }
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted"); ctx.textAlign = "right";
+      NAMES.forEach((word, i) => ctx.fillText(word, gx - 8, gy + i*cell + cell/2));
+      ctx.textAlign = "left";
+      ctx.fillStyle = css("--faint");
+      ctx.fillText("ATTENTION — OUTLINE IS THE TARGET", 12, 26);
+
+      /* right: loss and separation over training */
+      const px = w*0.46, pw = w - px - 18, py = 56, ph = h - 96;
+      const maxStep = Math.max(history[history.length - 1].step, 20);
+      const maxLoss = Math.max(...history.map(p => p.loss), 1.5);
+      const maxSep  = Math.max(...history.map(p => p.sep), 1);
+
+      ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, py); ctx.lineTo(px, py + ph); ctx.lineTo(px + pw, py + ph);
+      ctx.stroke();
+
+      /* random-guess reference line, ln(4) */
+      const lnN = Math.log(N);
+      if(lnN <= maxLoss){
+        const y = py + ph - (lnN/maxLoss)*ph;
+        ctx.save();
+        ctx.setLineDash([3, 4]); ctx.strokeStyle = css("--faint");
+        ctx.beginPath(); ctx.moveTo(px, y); ctx.lineTo(px + pw, y); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = css("--faint");
+        ctx.font = "600 9px ui-monospace, monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("ln 4 — random guessing", px + pw, y - 7);
+      }
+
+      /* Log-spaced steps: almost everything worth seeing happens in the first
+         fifty, and a linear axis flattens it against the origin. */
+      const xOf = s => px + (Math.log1p(s)/Math.log1p(maxStep))*pw;
+      const line = (key, max, colour) => {
+        ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.beginPath();
+        history.forEach((p, i) => {
+          const x = xOf(p.step);
+          const y = py + ph - (p[key]/max)*ph;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+        ctx.stroke();
+      };
+      line("sep", maxSep, css("--q"));
+      line("loss", maxLoss, css("--v"));
+
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.textAlign = "left";
+      ctx.fillStyle = css("--q");
+      ctx.fillText(`‖W_Q − W_K‖   peak ${maxSep.toFixed(1)}`, px, 26);
+      ctx.fillStyle = css("--v");
+      ctx.fillText("LOSS", px, 40);
+      ctx.fillStyle = css("--faint");
+      ctx.textAlign = "right";
+      ctx.fillText(`${maxStep} steps — log spaced`, px + pw, py + ph + 18);
+
+      document.getElementById("ro-step").textContent = step;
+      document.getElementById("ro-loss").textContent = loss.toFixed(4);
+      document.getElementById("ro-sep").textContent = separation().toFixed(2);
+    };
+
+    /* ── figure 8 ─────────────────────────────────────────────────────── */
+    const SUPER = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴",
+                    5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
+    const superscript = n => String(n).split("").map(ch => SUPER[ch] ?? ch).join("");
+    let blameMode = "q";
+    const drawBlame = () => {
+      const { ctx, w, h } = fit(blameCanvas);
+      ctx.clearRect(0, 0, w, h);
+      ctx.textBaseline = "middle";
+
+      const cell = Math.min((w - 220)/N, (h - 110)/N);
+      const gx = Math.max(110, (w - N*cell)/2), gy = 62;
+      const peak = Math.max(...G.flat().map(Math.abs));
+
+      /* As training converges the blame shrinks toward zero, and fixed
+         decimals would print a grid of 0.000 that shows nothing. Scale to the
+         largest entry and state the exponent, so the shape stays readable at
+         any magnitude. */
+      const exponent = peak > 1e-12 ? Math.floor(Math.log10(peak)) : 0;
+      const factor = Math.pow(10, -exponent);
+
+      for(let i = 0; i < N; i++){
+        for(let j = 0; j < N; j++){
+          const value = G[i][j];
+          const hue = value >= 0 ? css("--k") : css("--q");
+          const x = gx + j*cell, y = gy + i*cell;
+          const share = peak > 1e-12 ? Math.abs(value)/peak : 0;
+          ctx.fillStyle = `color-mix(in srgb, ${hue} ${Math.round(share*78)}%, ${css("--panel")})`;
+          ctx.fillRect(x, y, cell - 2, cell - 2);
+          ctx.fillStyle = share > .55 ? "#fff" : css("--ink");
+          ctx.font = "600 11px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText((value*factor).toFixed(2), x + cell/2 - 1, y + cell/2);
+        }
+      }
+
+      /* the slice that one Q or one K vector is assembled from */
+      const accent = blameMode === "q" ? css("--q") : css("--k");
+      ctx.strokeStyle = accent; ctx.lineWidth = 2.5;
+      for(let s = 0; s < N; s++){
+        if(blameMode === "q") ctx.strokeRect(gx - 3, gy + s*cell - 3, N*cell + 4, cell + 4);
+        else ctx.strokeRect(gx + s*cell - 3, gy - 3, cell + 4, N*cell + 4);
+      }
+
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted"); ctx.textAlign = "right";
+      NAMES.forEach((word, i) => ctx.fillText(word, gx - 12, gy + i*cell + cell/2));
+      ctx.textAlign = "center";
+      NAMES.forEach((word, j) => ctx.fillText(word, gx + j*cell + cell/2 - 1, gy - 24));
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = css("--faint");
+      ctx.fillText(`G = A − A*   (attended too much / too little)`, 12, 24);
+      ctx.fillText(peak > 1e-12
+        ? `values × 10${exponent === 0 ? "⁰" : superscript(exponent)}   ·   step ${step}`
+        : `blame has reached zero — the run has converged   ·   step ${step}`, 12, 42);
+      ctx.fillStyle = accent;
+      ctx.font = "600 11px ui-monospace, monospace";
+      ctx.fillText(blameMode === "q"
+        ? "each ROW → one query vector: corrected by the words it looked at"
+        : "each COLUMN → one key vector: corrected by the words that looked at it",
+        12, h - 16);
+    };
+
+    const redraw = () => { drawTrain(); drawBlame(); };
+
+    document.getElementById("tr-step").addEventListener("click", () => { trainStep(); redraw(); });
+    document.getElementById("tr-run").addEventListener("click", () => {
+      if(running){ clearInterval(running); running = null; return; }
+      let left = 200;
+      running = setInterval(() => {
+        for(let k = 0; k < 4 && left > 0; k++, left--) trainStep();
+        redraw();
+        if(left <= 0){ clearInterval(running); running = null; }
+      }, 30);
+    });
+
+    const tiedBtn = document.getElementById("tr-tied");
+    const randBtn = document.getElementById("tr-rand");
+    const posBtn  = document.getElementById("tr-nopos");
+    const setStart = kind => {
+      startMode = kind;
+      tiedBtn.setAttribute("aria-pressed", String(kind === "tied"));
+      randBtn.setAttribute("aria-pressed", String(kind === "random"));
+      reset();
+    };
+    tiedBtn.addEventListener("click", () => setStart("tied"));
+    randBtn.addEventListener("click", () => setStart("random"));
+    posBtn.addEventListener("click", () => {
+      withPos = !withPos;
+      posBtn.setAttribute("aria-pressed", String(!withPos));
+      posBtn.textContent = withPos ? "Drop position" : "Restore position";
+      reset();
+    });
+
+    const qBtn = document.getElementById("bl-q"), kBtn = document.getElementById("bl-k");
+    const setBlame = which => {
+      blameMode = which;
+      qBtn.setAttribute("aria-pressed", String(which === "q"));
+      kBtn.setAttribute("aria-pressed", String(which === "k"));
+      drawBlame();
+    };
+    qBtn.addEventListener("click", () => setBlame("q"));
+    kBtn.addEventListener("click", () => setBlame("k"));
+
+    reset();
+    register(redraw);
   })();
 })();
 </script>
