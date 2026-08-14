@@ -1,0 +1,11 @@
+# Transcripts are third-party content. Keep them local; commit only the
+# derived metadata and citation index. See README.md in this directory.
+*.transcript.md
+*.raw.*
+*.json3
+*.vtt
+*.srt
+
+!index.md
+!README.md
+!*.meta.json

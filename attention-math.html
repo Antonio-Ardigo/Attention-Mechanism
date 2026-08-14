@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Math Behind Attention</title>
+<style>
+  /* ── tokens ─────────────────────────────────────────────────────────────
+     Light palette on bare :root. Dark redefines tokens only, twice: once for
+     the un-stamped system-dark case, once for an explicit toggle. Components
+     never read a colour from inside a media block. */
+  :root{
+    --paper:#eceff4;
+    --panel:#ffffff;
+    --sunk:#f4f6f9;
+    --ink:#0e141c;
+    --muted:#5a6474;
+    --faint:#8b95a5;
+    --line:#d3dae3;
+    --grid:#e2e8f0;
+    --q:#2f5fd0;
+    --k:#b0512f;
+    --v:#1c7a58;
+    --accent:#2f5fd0;
+    --flag:#8a6a1f;
+    --flag-wash:rgba(190,150,50,.10);
+    --shadow:0 1px 2px rgba(14,20,28,.05), 0 10px 30px rgba(14,20,28,.06);
+    --rule:1px solid var(--line);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#0a0f16;
+      --panel:#121a24;
+      --sunk:#0e1620;
+      --ink:#e7ecf3;
+      --muted:#98a4b4;
+      --faint:#69758a;
+      --line:#233040;
+      --grid:#1a2532;
+      --q:#6f97f7;
+      --k:#e5885a;
+      --v:#45bd8c;
+      --accent:#6f97f7;
+      --flag:#d9ac55;
+      --flag-wash:rgba(217,172,85,.10);
+      --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 34px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0a0f16;
+    --panel:#121a24;
+    --sunk:#0e1620;
+    --ink:#e7ecf3;
+    --muted:#98a4b4;
+    --faint:#69758a;
+    --line:#233040;
+    --grid:#1a2532;
+    --q:#6f97f7;
+    --k:#e5885a;
+    --v:#45bd8c;
+    --accent:#6f97f7;
+    --flag:#d9ac55;
+    --flag-wash:rgba(217,172,85,.10);
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 34px rgba(0,0,0,.4);
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  }
+
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font:16.5px/1.7 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ── layout ──────────────────────────────────────────────────────────── */
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px 120px}
+  .col{max-width:680px}
+  .col p,.col ul,.col ol{margin:14px 0}
+
+  /* ── type ────────────────────────────────────────────────────────────── */
+  .display{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    font-weight:600;letter-spacing:-.015em;text-wrap:balance;
+  }
+  .mono,code,kbd,.num{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+  .num{font-variant-numeric:tabular-nums}
+
+  header.masthead{padding:76px 0 40px;max-width:760px}
+  header.masthead .eyebrow{
+    font:600 .72rem/1.4 ui-monospace,monospace;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 20px;
+  }
+  header.masthead h1{font-size:clamp(2.3rem,5.4vw,3.5rem);line-height:1.04;margin:0 0 .4em}
+  header.masthead .standfirst{font-size:1.2rem;line-height:1.6;color:var(--muted);margin:0}
+
+  .sourceline{
+    margin-top:34px;padding-top:20px;border-top:var(--rule);
+    font-size:.88rem;color:var(--muted);max-width:600px;
+  }
+  .sourceline a{color:var(--accent)}
+
+  .thesis{
+    margin:44px 0 0;padding:24px 26px;max-width:760px;
+    background:var(--panel);border:var(--rule);border-radius:3px;
+    border-left:3px solid var(--accent);box-shadow:var(--shadow);
+  }
+  .thesis p{margin:0;font-size:1.1rem;line-height:1.6}
+  .thesis p + p{margin-top:12px}
+
+  /* ── contents ────────────────────────────────────────────────────────── */
+  nav.toc{margin:52px 0 0;padding:22px 26px;background:var(--sunk);border:var(--rule);border-radius:3px;max-width:760px}
+  nav.toc h2{font:600 .72rem/1 ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+  nav.toc ol{margin:0;padding:0;list-style:none;counter-reset:toc;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px 30px}
+  nav.toc li{counter-increment:toc;margin:0}
+  nav.toc a{
+    display:grid;grid-template-columns:2.1em 1fr;gap:4px;
+    padding:5px 0;color:var(--ink);text-decoration:none;font-size:.94rem;
+  }
+  nav.toc a::before{content:counter(toc,decimal-leading-zero);color:var(--faint);font:600 .8rem/1.7 ui-monospace,monospace}
+  nav.toc a:hover{color:var(--accent)}
+  nav.toc a:hover::before{color:var(--accent)}
+
+  /* ── sections ────────────────────────────────────────────────────────── */
+  section{padding-top:78px;scroll-margin-top:20px}
+  section > h2{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    font-weight:600;font-size:1.72rem;line-height:1.2;letter-spacing:-.014em;
+    margin:0;max-width:680px;text-wrap:balance;
+  }
+  section > h2 .step{
+    display:block;font:600 .72rem/1 ui-monospace,monospace;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+  }
+  section > .deck{margin:10px 0 0;max-width:680px;color:var(--muted);font-size:1.04rem}
+  h3{font-size:1.06rem;font-weight:650;margin:34px 0 0;max-width:680px}
+
+  /* ── figures ─────────────────────────────────────────────────────────── */
+  figure{
+    margin:30px 0 0;background:var(--panel);border:var(--rule);border-radius:3px;
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  figure.wide{max-width:1000px}
+  .fig-head{
+    display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;
+    padding:14px 20px;border-bottom:var(--rule);background:var(--sunk);
+  }
+  .fig-head .label{font:600 .7rem/1 ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .fig-head .hint{font-size:.82rem;color:var(--faint)}
+  .fig-body{padding:20px}
+  .plotwrap{position:relative;width:100%}
+  canvas{display:block;width:100%;touch-action:none}
+  figcaption{padding:14px 20px 18px;font-size:.88rem;line-height:1.6;color:var(--muted);border-top:var(--rule)}
+
+  /* controls */
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+  button.ctl{
+    font:600 .85rem/1 inherit;padding:9px 15px;border-radius:3px;cursor:pointer;
+    background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    transition:border-color .15s,color .15s;
+  }
+  button.ctl:hover{border-color:var(--accent);color:var(--accent)}
+  button.ctl[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  :root[data-theme="dark"] button.ctl[aria-pressed="true"],
+  button.ctl[aria-pressed="true"]{color:#fff}
+  button.ctl:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .slider{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin:10px 0}
+  .slider label{font:600 .82rem/1 ui-monospace,monospace;color:var(--muted);letter-spacing:.04em}
+  .slider output{font:600 .85rem/1 ui-monospace,monospace;color:var(--ink);min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+
+  /* readouts */
+  .readout{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:1px;
+    background:var(--line);border:var(--rule);border-radius:3px;overflow:hidden;margin-top:16px;
+  }
+  .readout div{background:var(--panel);padding:11px 14px}
+  .readout dt{font:600 .68rem/1.3 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0}
+  .readout dd{margin:5px 0 0;font:650 1.18rem/1 ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+  /* ── inline devices ──────────────────────────────────────────────────── */
+  .pen{font-weight:650}
+  .pen.q{color:var(--q)} .pen.k{color:var(--k)} .pen.v{color:var(--v)}
+  code{background:var(--sunk);border:var(--rule);padding:.1em .38em;border-radius:3px;font-size:.88em}
+
+  .formula{
+    margin:26px 0 0;padding:22px;background:var(--sunk);border:var(--rule);border-radius:3px;
+    font-family:ui-monospace,monospace;font-size:1.12rem;text-align:center;overflow-x:auto;max-width:680px;
+  }
+
+  blockquote.said{
+    margin:26px 0 0;padding:0 0 0 20px;border-left:2px solid var(--line);max-width:640px;
+  }
+  blockquote.said p{margin:0;font-size:1.02rem;font-style:italic;color:var(--ink)}
+  blockquote.said cite{display:block;margin-top:8px;font-size:.8rem;font-style:normal;color:var(--faint)}
+
+  .flag{
+    margin:26px 0 0;padding:16px 20px;max-width:680px;
+    background:var(--flag-wash);border:1px solid var(--line);border-left:3px solid var(--flag);border-radius:3px;
+  }
+  .flag .tag{display:block;font:700 .68rem/1 ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--flag);margin-bottom:8px}
+  .flag p{margin:0;font-size:.95rem}
+  .flag p + p{margin-top:10px}
+
+  table.spec{border-collapse:collapse;width:100%;margin:22px 0 0;font-size:.92rem}
+  .scroller{overflow-x:auto;max-width:760px;margin-top:22px}
+  .scroller table.spec{margin-top:0;min-width:460px}
+  table.spec th,table.spec td{text-align:left;padding:10px 14px;border-bottom:var(--rule);vertical-align:top}
+  table.spec th{font:600 .7rem/1.3 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  table.spec td.mono{font-family:ui-monospace,monospace;font-size:.88rem;white-space:nowrap}
+
+  ul.plain{list-style:none;padding:0;max-width:680px}
+  ul.plain li{padding:12px 0;border-bottom:var(--rule)}
+  ul.plain li:last-child{border-bottom:0}
+  ul.plain b{font-weight:650}
+
+  footer{margin-top:96px;padding-top:28px;border-top:var(--rule);max-width:760px;color:var(--muted);font-size:.9rem}
+  footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Attention, worked out</p>
+    <h1 class="display">The Math Behind Attention</h1>
+    <p class="standfirst">Queries, keys, and values are three matrices doing one job: deciding which words should listen to which, and what they hear when they do. Here is the whole mechanism, one step at a time, with every step you can actually play with.</p>
+    <p class="sourceline">This walkthrough follows the line of Luis Serrano's <a href="https://www.youtube.com/watch?v=UPtG_38Oq8o">“The math behind Attention: Keys, Queries, and Values matrices”</a> (Serrano.Academy, ~33 min) — same order, same worked example. Quotations are his. The interactive figures, the shape tables, and the closing list of what the video leaves out are additions.</p>
+  </header>
+
+  <div class="thesis">
+    <p class="display" style="font-size:1.18rem">Attention is built on one idea: <b>similarity</b>. Everything else — the softmax, the three matrices, the square root, the multiple heads — is machinery for measuring similarity in a space where measuring it is worth doing.</p>
+    <p style="font-size:.98rem;color:var(--muted)">Hold onto that and the formula stops being a wall of symbols. It becomes a sentence you can read left to right.</p>
+  </div>
+
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#s1">Two sentences, one word</a></li>
+      <li><a href="#s2">Three ways to ask “how close?”</a></li>
+      <li><a href="#s3">Every pair at once</a></li>
+      <li><a href="#s4">Turning closeness into shares</a></li>
+      <li><a href="#s5">Words move toward their context</a></li>
+      <li><a href="#s6">Keys and queries: a space for matching</a></li>
+      <li><a href="#s7">Values: a space for predicting</a></li>
+      <li><a href="#s8">The formula, assembled</a></li>
+      <li><a href="#s9">Many heads at once</a></li>
+      <li><a href="#s10">Where the matrices come from</a></li>
+      <li><a href="#s11">How the transpose splits them apart</a></li>
+      <li><a href="#s12">What the video leaves out</a></li>
+    </ol>
+  </nav>
+
+  <!-- ────────────────────────────────────────────────────────────────── 1 -->
+  <section id="s1">
+    <h2 class="display"><span class="step">Step 01 · The problem</span>Two sentences, one word</h2>
+    <p class="deck">Attention exists because a word's meaning is not in the word.</p>
+    <div class="col">
+      <p>A model turns each word into a vector — a list of numbers that places it somewhere in a high-dimensional space, near words it resembles. That works beautifully until a word resembles two unrelated things at once:</p>
+      <p><b>“an apple and orange”</b> &nbsp;·&nbsp; <b>“an apple phone”</b></p>
+      <p>Same word. In the first sentence it belongs beside <i>pear</i> and <i>banana</i>. In the second it belongs beside <i>Samsung</i> and <i>laptop</i>. A single fixed vector for <i>apple</i> has to sit somewhere between the fruit neighbourhood and the technology neighbourhood — which means it is wrong in both sentences.</p>
+      <p>So the vector has to move, and what moves it has to be the surrounding words. That is the entire job description. Everything from here is how it gets done.</p>
+    </div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 2 -->
+  <section id="s2">
+    <h2 class="display"><span class="step">Step 02 · Similarity</span>Three ways to ask “how close?”</h2>
+    <p class="deck">Before words can pull on each other, we need a number for how related two of them are.</p>
+    <div class="col">
+      <p>There are three candidates, and they build on each other.</p>
+      <p><b>Dot product.</b> Multiply the vectors coordinate by coordinate and add up the results. If one coordinate means “fruitness” and another means “techness”, then two fruit words each have a big first coordinate, their product is big, and the sum comes out high. Two unrelated words have their large coordinates in different places, so nothing lines up and the total stays small.</p>
+      <blockquote class="said">
+        <p>“…when we add them together — that's the product of the tech and the product of the fruitness — we get a high number.”</p>
+        <cite>Serrano, on why the dot product measures relatedness</cite>
+      </blockquote>
+      <p><b>Cosine.</b> The dot product has a flaw: it grows when vectors are simply <i>longer</i>, regardless of direction. Divide it by both lengths and what's left is purely the angle — from <code>1</code> (pointing the same way) through <code>0</code> (perpendicular, unrelated) to <code>−1</code> (opposite).</p>
+      <p><b>Scaled dot product.</b> Cosine is well-behaved but throws away magnitude entirely, and normalising every pair is expensive. The compromise attention actually uses is to keep the dot product and divide by <code>√d</code>, the square root of the number of dimensions. Drag the vectors below and watch all three at once.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 1 · Similarity lab</span>
+        <span class="hint">Drag either arrowhead</span>
+      </div>
+      <div class="fig-body">
+        <div class="plotwrap"><canvas id="simlab" height="360" aria-label="Two draggable vectors on a plane with live similarity readouts"></canvas></div>
+        <dl class="readout">
+          <div><dt>Dot product</dt><dd id="ro-dot" class="num">—</dd></div>
+          <div><dt>Cosine</dt><dd id="ro-cos" class="num">—</dd></div>
+          <div><dt>Angle</dt><dd id="ro-ang" class="num">—</dd></div>
+          <div><dt>Scaled (÷√d)</dt><dd id="ro-scaled" class="num">—</dd></div>
+        </dl>
+        <div class="slider">
+          <label for="dimsl">d</label>
+          <input id="dimsl" type="range" min="2" max="1024" step="1" value="2">
+          <output id="dimout">2</output>
+        </div>
+      </div>
+      <figcaption>Push the two arrows apart and the cosine falls toward zero while the dot product follows. Now stretch one arrow without turning it: the dot product climbs, the cosine does not move at all. That gap is the reason the scaling term exists — raise <code>d</code> and watch the scaled value shrink back to a manageable size.</figcaption>
+    </figure>
+
+    <div class="col">
+      <p>Why <code>√d</code> specifically? Because dot products are sums over dimensions. Add more dimensions and you add more terms, so the totals spread out — with a thousand coordinates the numbers get big enough to cause trouble downstream.</p>
+      <blockquote class="said">
+        <p>“When you have very long vectors — for example with a thousand coordinates — you get really, really large dot products, and you don't want that. You want to manage these numbers.”</p>
+        <cite>Serrano, on the scaling term</cite>
+      </blockquote>
+      <p>The trouble is specific, and it's worth naming because the video doesn't: the next step is a softmax. Feed a softmax numbers that are far apart and it returns something close to all-or-nothing — one weight near 1, the rest near 0. A function pinned at its extremes has almost no slope, and no slope means no gradient, and no gradient means the layer stops learning. Dividing by <code>√d</code> keeps the scores in the range where softmax still has something to say.</p>
+    </div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 3 -->
+  <section id="s3">
+    <h2 class="display"><span class="step">Step 03 · The grid</span>Every pair at once</h2>
+    <p class="deck">One similarity is a number. All of them together are a table.</p>
+    <div class="col">
+      <p>A sentence of <code>n</code> words gives <code>n × n</code> pairs, and we want the similarity of every one of them — including each word with itself, which is always the highest score in its row, since nothing resembles a word more than the word does.</p>
+      <p>Read the grid a row at a time. Row <i>apple</i> answers: <i>of everything in this sentence, what does apple resemble?</i> That row is about to become the recipe for apple's new vector.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 2 · Pairwise similarity</span>
+        <span class="hint">Hover a cell</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Choose sentence">
+          <button class="ctl" id="sent-a" aria-pressed="true">“an apple and orange”</button>
+          <button class="ctl" id="sent-b" aria-pressed="false">“an apple phone”</button>
+        </div>
+        <div class="plotwrap"><canvas id="grid" height="330" aria-label="Heat map of pairwise word similarities"></canvas></div>
+      </div>
+      <figcaption>Cosine similarity between every pair of words, computed live from the two-dimensional toy embeddings used throughout this page. Warmer means more alike. Notice that swapping the sentence doesn't change any word's own vector — it changes which words are in the room.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 4 -->
+  <section id="s4">
+    <h2 class="display"><span class="step">Step 04 · Softmax</span>Turning closeness into shares</h2>
+    <p class="deck">Raw similarities can't be used as weights. They have to be made into a set of proportions first.</p>
+    <div class="col">
+      <p>We want each row of the grid to become a blend: <i>60% of this word, 30% of that one, 10% of the rest</i>. That means the row has to be all-positive and add to exactly 1. Cosine scores are neither — some are negative, and they add to whatever they add to.</p>
+      <p>The fix is softmax, and it is two moves. First raise <code>e</code> to the power of each score, which forces every value positive while keeping the order intact — a bigger score is still a bigger number afterwards. Then divide each one by the total, which makes them sum to 1.</p>
+      <p>The exponential is not just a way to remove minus signs. It exaggerates: it widens the gap between the top score and the rest, so a word that is somewhat more relevant ends up considerably more influential. How much it exaggerates is exactly what the <code>√d</code> divisor controls.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 3 · Softmax lab</span>
+        <span class="hint">Move the scores and the divisor</span>
+      </div>
+      <div class="fig-body">
+        <div class="plotwrap"><canvas id="smx" height="300" aria-label="Bar chart comparing raw scores, exponentials, and normalised weights"></canvas></div>
+        <div class="slider"><label for="sc0">score₁</label><input id="sc0" type="range" min="-6" max="6" step=".1" value="3.4"><output id="sc0o">3.4</output></div>
+        <div class="slider"><label for="sc1">score₂</label><input id="sc1" type="range" min="-6" max="6" step=".1" value="1.2"><output id="sc1o">1.2</output></div>
+        <div class="slider"><label for="sc2">score₃</label><input id="sc2" type="range" min="-6" max="6" step=".1" value="-0.8"><output id="sc2o">-0.8</output></div>
+        <div class="slider"><label for="scd">÷ √d</label><input id="scd" type="range" min="1" max="16" step=".25" value="1"><output id="scdo">1.00</output></div>
+      </div>
+      <figcaption>Push the divisor to 1 and the largest score swallows almost the entire weight — the layer has stopped comparing and started picking. Push it to 16 and every word gets nearly the same share, which is just as useless. Real models sit between, and the value of <code>d</code> is what puts them there.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 5 -->
+  <section id="s5">
+    <h2 class="display"><span class="step">Step 05 · Attention</span>Words move toward their context</h2>
+    <p class="deck">With a row of weights in hand, the mechanism does the obvious thing: it takes a weighted average.</p>
+    <div class="col">
+      <p>Apple's new vector is every word's vector, each multiplied by apple's weight for it, all added up. Words it scored highly contribute most; words it ignored barely register.</p>
+      <p>Geometrically this is a word being dragged toward the company it keeps. Put <i>orange</i> in the sentence and <i>apple</i> slides into the fruit neighbourhood. Put <i>phone</i> there instead and the same starting vector slides the other way. Nothing about <i>apple</i> changed — only who else was present.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 4 · The apple, moved</span>
+        <span class="hint">Switch sentences and watch</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Choose sentence">
+          <button class="ctl" id="mv-a" aria-pressed="true">“an apple and orange”</button>
+          <button class="ctl" id="mv-b" aria-pressed="false">“an apple phone”</button>
+          <button class="ctl" id="mv-reset">Reset positions</button>
+        </div>
+        <div class="plotwrap"><canvas id="move" height="400" aria-label="Word vectors in two dimensions, with apple moving toward its context"></canvas></div>
+      </div>
+      <figcaption>The dashed marker is <i>apple</i>'s original vector; the solid one is where the weighted average puts it. The pull is computed live — cosine similarity, softmax, weighted sum — not animated by hand. The horizontal axis stands for technology, the vertical for fruit.</figcaption>
+    </figure>
+
+    <div class="col">
+      <p>This is real attention, and it already solves the problem from step one. But it has a weakness that motivates everything left in the video: it uses the plain embedding space for two jobs at once — deciding <i>who attends to whom</i>, and supplying <i>what gets passed along</i>. Those two jobs want different geometry.</p>
+    </div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 6 -->
+  <section id="s6">
+    <h2 class="display"><span class="step">Step 06 · K and Q</span>Keys and queries: a space for matching</h2>
+    <p class="deck">The first fix: don't measure similarity in the original space. Measure it in one built for the purpose.</p>
+    <div class="col">
+      <p>The embedding space a model starts with was shaped by general word meaning. It is not necessarily the space where the distinctions that matter <i>for attention</i> are the easy ones to see. So before comparing anything, multiply every vector by a matrix — a linear transformation that stretches, rotates, and squashes the space into a more useful arrangement.</p>
+      <blockquote class="said">
+        <p>“…transform our embedding into one that is better suited for this attention problem.”</p>
+        <cite>Serrano, on what the keys and queries matrices do</cite>
+      </blockquote>
+      <p>There are two such matrices, not one, because the comparison is directional. When a word looks around, it is asking a question — that projection is its <span class="pen q">query</span>. When it is being looked at, it is offering a description of itself — that projection is its <span class="pen k">key</span>. What a word wants and what a word advertises are different things, so they get different matrices.</p>
+      <p>Every score in the grid is now a query dotted with a key, in the new space, rather than two raw embeddings dotted together.</p>
+
+      <h3>A common wrong turn: aren't Q and K transposes of each other?</h3>
+      <p>No — and the confusion is worth clearing up carefully, because the truth underneath it is the most important property attention has.</p>
+      <p>The transpose in <code><span class="pen q">Q</span><span class="pen k">K</span>ᵀ</code> is shape bookkeeping. It turns the key matrix on its side so the multiplication pairs every query with every key in one go. It says nothing about a relationship between <span class="pen q">W<sub>Q</sub></span> and <span class="pen k">W<sub>K</sub></span>, which are two independent matrices, separately initialised and separately trained.</p>
+      <p>Now write out the score for word <i>i</i> attending to word <i>j</i>, and something interesting falls out:</p>
+    </div>
+
+    <div class="formula">score(i,&thinsp;j) = (x<sub>i</sub><span class="pen q">W<sub>Q</sub></span>) · (x<sub>j</sub><span class="pen k">W<sub>K</sub></span>)ᵀ = x<sub>i</sub> <b>(<span class="pen q">W<sub>Q</sub></span><span class="pen k">W<sub>K</sub></span>ᵀ)</b> x<sub>j</sub>ᵀ</div>
+
+    <div class="col">
+      <p>The two matrices only ever appear as the single product <code>M = W<sub>Q</sub>W<sub>K</sub>ᵀ</code>. And because they are independent, <b>M is not symmetric</b> — which means <code>score(i,&thinsp;j) ≠ score(j,&thinsp;i)</code>. How much <i>apple</i> attends to <i>orange</i> is a genuinely different number from how much <i>orange</i> attends to <i>apple</i>.</p>
+      <p>That asymmetry is the whole point. It is what lets a verb seek its subject without the subject being obliged to seek the verb back — what makes attention <i>directional</i> rather than merely mutual.</p>
+      <p>And here is what makes the misconception load-bearing: if the two matrices really were transposes of each other, then <code>M = W<sub>Q</sub>W<sub>Q</sub>ᵀ</code>, which is symmetric by construction. Every score would equal its mirror. Direction would vanish. Tying them together doesn't create the query/key distinction — it destroys it.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 5 · Direction, and what tying costs</span>
+        <span class="hint">Compare the mirrored pair</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Choose matrix relationship">
+          <button class="ctl" id="asym-free" aria-pressed="true">Independent W<sub>Q</sub>, W<sub>K</sub></button>
+          <button class="ctl" id="asym-tied" aria-pressed="false">Tied: W<sub>K</sub> = W<sub>Q</sub></button>
+        </div>
+        <div class="plotwrap"><canvas id="asym" height="330" aria-label="Score matrix showing asymmetry between mirrored cells"></canvas></div>
+        <dl class="readout">
+          <div><dt>apple → orange</dt><dd id="ro-ao" class="num">—</dd></div>
+          <div><dt>orange → apple</dt><dd id="ro-oa" class="num">—</dd></div>
+          <div><dt>Max |S − Sᵀ|</dt><dd id="ro-asym" class="num">—</dd></div>
+        </dl>
+      </div>
+      <figcaption>Raw scores before softmax, so the symmetry is visible directly. With independent matrices the two outlined cells differ and the mirror gap is non-zero. Tie the matrices and the gap collapses to zero — the grid becomes its own mirror image, and every question a word can ask, it must also answer identically.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 7 -->
+  <section id="s7">
+    <h2 class="display"><span class="step">Step 07 · V</span>Values: a space for predicting</h2>
+    <p class="deck">The second fix, and the sharpest point in the whole video.</p>
+    <div class="col">
+      <p>We now have a space arranged for comparing words. Here's the catch: that is a terrible place to leave them. It was optimised for matching, and matching is not what the rest of the model needs. What the rest of the model needs is a representation that helps predict the next word.</p>
+      <p>So there is a third matrix. Once the weights have been computed in the matching space, the weighted average is taken over <span class="pen v">value</span> vectors — the same words projected through a <i>different</i> matrix, into a space arranged for the downstream task.</p>
+      <blockquote class="said">
+        <p>“The embedding on the left is not where you want to move the words — you only want it for calculating similarities. The embedding on the right is optimized for finding the next word in a sentence.”</p>
+        <cite>Serrano, on why the values matrix is separate</cite>
+      </blockquote>
+      <p>Two spaces, two purposes. <span class="pen q">Q</span> and <span class="pen k">K</span> decide <i>how much</i>; <span class="pen v">V</span> decides <i>what</i>. Collapse them into one matrix and you force a single arrangement of the space to be simultaneously good at finding relevant words and good at representing them for prediction. Keeping them apart is what lets each be good at its own job.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 6 · The same words, three spaces</span>
+        <span class="hint">Apply each projection</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Choose projection">
+          <button class="ctl" id="sp-e" aria-pressed="true">Embedding</button>
+          <button class="ctl" id="sp-k" aria-pressed="false">K / Q space</button>
+          <button class="ctl" id="sp-v" aria-pressed="false">V space</button>
+        </div>
+        <div class="plotwrap"><canvas id="spaces" height="380" aria-label="Word positions under three different linear projections"></canvas></div>
+      </div>
+      <figcaption><b>Illustrative.</b> The two matrices here were picked by hand to make the point visible: the K/Q projection pulls the fruit and technology groups apart so similarity is easy to read, while the V projection arranges the same words by what tends to follow them. In a real model nobody picks these — they are learned, which is step ten.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 8 -->
+  <section id="s8">
+    <h2 class="display"><span class="step">Step 08 · Assembly</span>The formula, assembled</h2>
+    <p class="deck">Every symbol below is a step you have already seen.</p>
+
+    <div class="formula">Attention(<span class="pen q">Q</span>,&thinsp;<span class="pen k">K</span>,&thinsp;<span class="pen v">V</span>) = softmax( <span class="pen q">Q</span><span class="pen k">K</span>ᵀ / √d<sub>k</sub> ) <span class="pen v">V</span></div>
+
+    <div class="col">
+      <p>Read it right to left inside the brackets, then out:</p>
+    </div>
+
+    <div class="scroller">
+      <table class="spec">
+        <thead><tr><th>Piece</th><th>Shape</th><th>What just happened</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">X</td><td class="mono">n × d<sub>model</sub></td><td>The sentence: one embedding row per word.</td></tr>
+          <tr><td class="mono"><span class="pen q">Q</span> = X·W<sub>Q</sub></td><td class="mono">n × d<sub>k</sub></td><td>Every word's question, in the matching space.</td></tr>
+          <tr><td class="mono"><span class="pen k">K</span> = X·W<sub>K</sub></td><td class="mono">n × d<sub>k</sub></td><td>Every word's advertisement, same space.</td></tr>
+          <tr><td class="mono"><span class="pen v">V</span> = X·W<sub>V</sub></td><td class="mono">n × d<sub>v</sub></td><td>Every word's contribution, in the prediction space.</td></tr>
+          <tr><td class="mono"><span class="pen q">Q</span><span class="pen k">K</span>ᵀ</td><td class="mono">n × n</td><td>The grid from step three — every query against every key.</td></tr>
+          <tr><td class="mono">÷ √d<sub>k</sub></td><td class="mono">n × n</td><td>Scores brought back into a range softmax can work with.</td></tr>
+          <tr><td class="mono">softmax(·)</td><td class="mono">n × n</td><td>Each row becomes positive shares that sum to 1.</td></tr>
+          <tr><td class="mono">(·)<span class="pen v">V</span></td><td class="mono">n × d<sub>v</sub></td><td>The weighted average. One new vector per word.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="col">
+      <p>The output has one row per word, exactly like the input — which is what allows these blocks to be stacked, each one re-asking the question in a space the previous layer has already improved.</p>
+      <div class="flag">
+        <span class="tag">Notation</span>
+        <p>The video writes this product as <code>K·Qᵀ</code>; the paper and every implementation write <code>Q·Kᵀ</code>. It is the same computation transposed, but if you go from the video to code expecting the video's arrangement, your dimensions will not line up. Use <code>Q·Kᵀ</code> — rows are queries, columns are keys.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────────────────────────────────────────────────────────── 9 -->
+  <section id="s9">
+    <h2 class="display"><span class="step">Step 09 · Multi-head</span>Many heads at once</h2>
+    <p class="deck">One set of matrices asks one kind of question. Models run several sets in parallel.</p>
+    <div class="col">
+      <p>Reading the word <i>were</i>, you might want to know what its subject is, what tense the sentence is in, and whether you are inside a quotation. A single <span class="pen q">Q</span>/<span class="pen k">K</span>/<span class="pen v">V</span> triple produces one attention pattern, so it can chase one of those. The answer is to run many triples side by side — each a <b>head</b>, each with its own three matrices.</p>
+      <p>Their outputs are then glued together end to end, and one final matrix squeezes the result back down to the size the rest of the model expects. That last matrix is not bookkeeping: it is where the model learns how much to trust each head.</p>
+      <blockquote class="said">
+        <p>“Concatenate them first… a linear step over here is a rectangular matrix that is going to transform this into a lower dimensional embedding.”</p>
+        <cite>Serrano, on combining heads</cite>
+      </blockquote>
+      <p>Because each head starts from its own random matrices, they diverge during training and end up doing recognisably different jobs — one tracking the previous word, another linking pronouns to names, another spotting repeated patterns. Nobody assigns those jobs.</p>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── 10 -->
+  <section id="s10">
+    <h2 class="display"><span class="step">Step 10 · Origin</span>Where the matrices come from</h2>
+    <p class="deck">Every matrix on this page is learned. None of them is designed.</p>
+    <div class="col">
+      <p>It would be reasonable to assume, after ten steps of careful construction, that someone sat down and worked out what <span class="pen q">W<sub>Q</sub></span>, <span class="pen k">W<sub>K</sub></span>, and <span class="pen v">W<sub>V</sub></span> should contain. Nobody did. They start as small random numbers.</p>
+      <p>What happens instead is that the model is asked, over and over, to predict the next word. When it gets one wrong, the error is traced back through every operation that contributed — including the attention weights — and each matrix is nudged fractionally in the direction that would have made the prediction less wrong. Repeat across billions of examples.</p>
+      <p>No training example contains an attention pattern. There is no label saying <i>this verb should look at that subject</i>. The grammar-shaped behaviour that appears in trained models appears because it happens to reduce next-word error, and for no other reason. The three matrices are not instructions; they are residue.</p>
+      <p>That is also why a trained model handles sentences it has never seen. What was learned is a general way of asking and advertising, not a stored list of which words go with which.</p>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── 11 -->
+  <section id="s11">
+    <h2 class="display"><span class="step">Step 11 · Blame</span>How the transpose splits them apart</h2>
+    <p class="deck">Step six said <span class="pen q">W<sub>Q</sub></span> and <span class="pen k">W<sub>K</sub></span> are independent. This is how gradient descent makes them <i>behave</i> differently — and here the transpose really is doing the work.</p>
+    <div class="col">
+      <p>Learning needs one thing from every weight: how much it contributed to the mistake. Work backwards from the loss and that question reaches the score matrix first, as a grid the same shape as <code><span class="pen q">Q</span><span class="pen k">K</span>ᵀ</code>. Call it <code>G</code>. For a softmax followed by cross-entropy it takes a famously simple form:</p>
+    </div>
+
+    <div class="formula">G = A − A*  &nbsp;&nbsp;<span style="color:var(--muted);font-size:.85rem">(what the model attended to, minus what it should have)</span></div>
+
+    <div class="col">
+      <p>Every entry of <code>G</code> is a small instruction: <i>the weight token i placed on token j was this much too high, or too low</i>. Now that blame has to reach <span class="pen q">Q</span> and <span class="pen k">K</span>, and both fed the same grid. Here is the split:</p>
+    </div>
+
+    <div class="formula">∂L/∂<span class="pen q">Q</span> = G·<span class="pen k">K</span> &nbsp;&nbsp;&nbsp;&nbsp; ∂L/∂<span class="pen k">K</span> = <b>G</b><b>ᵀ</b>·<span class="pen q">Q</span></div>
+
+    <div class="col">
+      <p>That transpose is not decoration, and it is the answer to the question this section exists for. Read what it means one index at a time:</p>
+      <ul class="plain">
+        <li><b>Row <i>i</i> of G</b> is everything token <i>i</i> got wrong <i>about who it looked at</i>. Without the transpose, <span class="pen q">Q</span> collects along rows — so a query vector is corrected by <b>the words it looked at</b>.</li>
+        <li><b>Column <i>j</i> of G</b> is everything <i>everyone</i> got wrong <i>about looking at token j</i>. The transpose makes <span class="pen k">K</span> collect along columns — so a key vector is corrected by <b>all the words that looked at it</b>.</li>
+      </ul>
+      <p>One vector per token in each case, but assembled from perpendicular slices of the same grid. A query is answerable to one word's needs. A key is answerable to the whole sentence's demands on it. Those are different jobs, and they produce different vectors — which is exactly the behavioural difference you would expect from the two roles.</p>
+      <p>From there the last hop is ordinary: <code>∂L/∂W<sub>Q</sub> = Xᵀ(∂L/∂<span class="pen q">Q</span>)</code>, and likewise for <span class="pen k">W<sub>K</sub></span>. Each matrix is nudged a little against its own gradient, a few hundred thousand times.</p>
+
+      <h3>They cannot stay the same, even if you force them to start identical</h3>
+      <p>Here is the sharpest version of the argument. Set <code>W<sub>Q</sub> = W<sub>K</sub></code> exactly — same numbers, perfectly tied. If the two gradients were equal, the updates would be equal, and they would stay tied forever.</p>
+      <p>They are not equal, because <code>G</code> is not symmetric. <code>G·K</code> and <code>Gᵀ·K</code> differ the moment <code>G ≠ Gᵀ</code>, and there is no reason for a grid of prediction errors to be its own mirror image. So the matrices come apart on the very first step and keep going.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 7 · Trained apart from a tied start</span>
+        <span class="hint">Step it, or let it run</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Training controls">
+          <button class="ctl" id="tr-step">Step ×1</button>
+          <button class="ctl" id="tr-run">Run 200</button>
+          <button class="ctl" id="tr-tied" aria-pressed="true">Reset — tied start</button>
+          <button class="ctl" id="tr-rand" aria-pressed="false">Reset — random start</button>
+          <button class="ctl" id="tr-nopos" aria-pressed="false">Drop position</button>
+        </div>
+        <div class="plotwrap"><canvas id="trainlab" height="330" aria-label="Attention matrix converging to target, with loss and matrix-difference curves"></canvas></div>
+        <dl class="readout">
+          <div><dt>Step</dt><dd id="ro-step" class="num">0</dd></div>
+          <div><dt>Loss</dt><dd id="ro-loss" class="num">—</dd></div>
+          <div><dt>‖W<sub>Q</sub> − W<sub>K</sub>‖</dt><dd id="ro-sep" class="num">—</dd></div>
+        </dl>
+      </div>
+      <figcaption>The task: every token should attend to the <b>next</b> one — a target no symmetric score matrix can express. Starting tied, the separation is exactly <code>0.00</code>; a single step breaks it to <code>0.37</code>, and it climbs past <code>6.9</code> while the loss falls to about <code>0.0004</code> and the attention grid lands exactly on the outlined target. Nobody asked the two matrices to differ — the transposed gradient did it. The bump in the loss partway through is real, not a rendering artefact: the run passes through an unstable patch before settling. <b>Drop position</b> removes the two positional features and the run stalls at <code>1.2312</code>, just under the random-guess loss of <code>ln 4 ≈ 1.386</code> — “next” is not a fact about meaning, so without position there is nothing to learn.</figcaption>
+    </figure>
+
+    <div class="col">
+      <p>One honest caveat: the divergence needs a task that <i>rewards</i> asymmetry. This one is directional by construction. Give a model a perfectly symmetric objective and the two matrices would have no particular reason to separate — the mechanism permits difference, and the task is what demands it.</p>
+      <p>The figure below is the same grid of blame from a single training step, read the two ways.</p>
+    </div>
+
+    <figure class="wide">
+      <div class="fig-head">
+        <span class="label">Figure 8 · One grid, two readings</span>
+        <span class="hint">Switch which matrix is collecting</span>
+      </div>
+      <div class="fig-body">
+        <div class="controls" role="group" aria-label="Choose which matrix collects the blame">
+          <button class="ctl" id="bl-q" aria-pressed="true">W<sub>Q</sub> collects rows</button>
+          <button class="ctl" id="bl-k" aria-pressed="false">W<sub>K</sub> collects columns</button>
+        </div>
+        <div class="plotwrap"><canvas id="blame" height="330" aria-label="Score-gradient grid highlighted by row or by column"></canvas></div>
+      </div>
+      <figcaption>The grid is <code>G = A − A*</code> at the current training step of Figure 7 — warm means the model attended too much, cool means too little. The values never change between the two views. Only the direction they are gathered in does, and that single difference is what gives a query and a key their distinct behaviour.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ───────────────────────────────────────────────────────────────── 12 -->
+  <section id="s12">
+    <h2 class="display"><span class="step">Step 12 · Deltas</span>What the video leaves out</h2>
+    <p class="deck">The simplifications are the right ones for a first pass. They are still simplifications, and each one bites eventually.</p>
+    <ul class="plain">
+      <li><b>Position is nowhere.</b> Everything above is order-blind — shuffle the sentence and the arithmetic gives the same answer. Real transformers add positional information to the embeddings before attention runs, which is the only reason “dog bites man” differs from “man bites dog”. Figure 7's <b>Drop position</b> control shows the cost directly: the same training run that reaches near-zero loss with two positional features cannot get below random guessing without them.</li>
+      <li><b>No causal mask.</b> Here every word sees every other word. A model generating text must not see the future, so the scores above the diagonal are set to −∞ before the softmax, making their weights exactly zero.</li>
+      <li><b>“Moving words through space” is a metaphor.</b> A useful one, and the figures above lean on it — but the operation is a weighted sum of value vectors, and the result lives in the value space, not in the space the words started in. Do not expect to find the original word anywhere near where it appears to land.</li>
+      <li><b>The block isn't just attention.</b> Around every attention layer sits a residual connection, a normalisation step, and a feed-forward network. Remove them and deep transformers do not train at all.</li>
+      <li><b>Attention weights are not an explanation.</b> A heat map shows what each word looked at. That is genuinely informative and it is not the same as knowing why the model produced its answer — information also flows along paths the weights don't display.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p><b>Source.</b> Structure, worked example, and quotations follow Luis Serrano's <a href="https://www.youtube.com/watch?v=UPtG_38Oq8o">“The math behind Attention: Keys, Queries, and Values matrices”</a>, Serrano.Academy, published 31 August 2023. Quotations are reproduced for commentary and study; the video is his work and worth watching in full.</p>
+    <p>Figures compute their numbers live from two-dimensional toy embeddings defined in this page's source. They are teaching devices — real models use hundreds of dimensions and learned matrices, and the arrangement of a real embedding space is nothing so tidy.</p>
+  </footer>
+
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ── shared helpers ──────────────────────────────────────────────────── */
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const dot = (a,b) => a.reduce((s,v,i) => s + v*b[i], 0);
+  const norm = a => Math.sqrt(dot(a,a));
+  const cosine = (a,b) => {
+    const d = norm(a)*norm(b);
+    return d === 0 ? 0 : dot(a,b)/d;
+  };
+  const softmax = xs => {
+    const m = Math.max(...xs);
+    const e = xs.map(x => Math.exp(x - m));
+    const t = e.reduce((s,v) => s+v, 0);
+    return e.map(v => v/t);
+  };
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* Fit a canvas to its box at device resolution; returns the 2d context.
+     The intended CSS height is stashed on first call: assigning canvas.height
+     rewrites the height attribute, so re-reading it each frame would compound
+     by the pixel ratio and the canvas would double on every redraw. */
+  function fit(canvas){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if(!canvas.dataset.cssHeight) canvas.dataset.cssHeight = canvas.getAttribute("height");
+    const h = Number(canvas.dataset.cssHeight);
+    const w = canvas.clientWidth || canvas.parentElement.clientWidth;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  /* Every figure registers a draw fn; one place re-runs them all. */
+  const figures = [];
+  const register = fn => { figures.push(fn); fn(); };
+  const redrawAll = () => figures.forEach(fn => fn());
+
+  let resizeTimer;
+  addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(redrawAll, 120);
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawAll);
+
+  function gridBackdrop(ctx, w, h, step = 26){
+    ctx.save();
+    ctx.strokeStyle = css("--grid");
+    ctx.lineWidth = 1;
+    for(let x = step; x < w; x += step){
+      ctx.beginPath(); ctx.moveTo(x+.5, 0); ctx.lineTo(x+.5, h); ctx.stroke();
+    }
+    for(let y = step; y < h; y += step){
+      ctx.beginPath(); ctx.moveTo(0, y+.5); ctx.lineTo(w, y+.5); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* Fit a set of data points into the canvas box, origin always included, so
+     no plot ends up crammed in one corner or clipped at an edge. Callers pass
+     every point they might draw across all states, which keeps the frame
+     steady while a figure animates between them. */
+  function frameFor(points, w, h, pad = 52){
+    const xs = points.map(p => p[0]).concat(0);
+    const ys = points.map(p => p[1]).concat(0);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const spanX = Math.max(maxX - minX, 1e-6), spanY = Math.max(maxY - minY, 1e-6);
+    const boxW = w - pad*2, boxH = h - pad*2;
+    const unit = Math.min(boxW/spanX, boxH/spanY);
+    const ox = pad - minX*unit + (boxW - spanX*unit)/2;
+    const oy = h - pad + minY*unit - (boxH - spanY*unit)/2;
+    return { unit, ox, oy, toPx: p => [ox + p[0]*unit, oy - p[1]*unit] };
+  }
+
+  function axes(ctx, w, h, ox, oy){
+    ctx.strokeStyle = css("--line"); ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, oy + .5); ctx.lineTo(w, oy + .5);
+    ctx.moveTo(ox + .5, 0); ctx.lineTo(ox + .5, h);
+    ctx.stroke();
+  }
+
+  function arrow(ctx, x0, y0, x1, y1, colour, width = 2.5){
+    const ang = Math.atan2(y1-y0, x1-x0), head = 11;
+    ctx.save();
+    ctx.strokeStyle = colour; ctx.fillStyle = colour;
+    ctx.lineWidth = width; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x0, y0);
+    ctx.lineTo(x1 - Math.cos(ang)*head*.8, y1 - Math.sin(ang)*head*.8);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - Math.cos(ang-.42)*head, y1 - Math.sin(ang-.42)*head);
+    ctx.lineTo(x1 - Math.cos(ang+.42)*head, y1 - Math.sin(ang+.42)*head);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  /* ── toy embedding space, shared by figures 2, 4 and 5 ───────────────
+     Axis 0 = "technology", axis 1 = "fruit". Deliberately small and
+     hand-placed: these are teaching coordinates, not learned ones.
+     "apple" sits deliberately equidistant from "orange" and "phone" — the
+     ambiguity of step one, made numeric: its cosine with each is ≈0.77.     */
+  const WORDS = {
+    an:     [ 0.60, -1.90],
+    apple:  [ 1.00,  1.00],
+    and:    [ 1.40, -1.20],
+    orange: [ 0.20,  2.20],
+    phone:  [ 2.30,  0.20],
+  };
+  const SENTENCES = {
+    a: { label: "an apple and orange", words: ["an","apple","and","orange"] },
+    b: { label: "an apple phone",      words: ["an","apple","phone"] },
+  };
+
+  /* ══ Figure 1 · similarity lab ═══════════════════════════════════════ */
+  (() => {
+    const canvas = document.getElementById("simlab");
+    if(!canvas) return;
+    const dimSlider = document.getElementById("dimsl");
+    const dimOut = document.getElementById("dimout");
+    let a = { x: 1.6, y: 1.1 }, b = { x: 1.9, y: -0.7 }, dragging = null;
+
+    const draw = () => {
+      const { ctx, w, h } = fit(canvas);
+      const cx = w/2, cy = h/2, unit = Math.min(w, h)/5.4;
+      const toPx = p => [cx + p.x*unit, cy - p.y*unit];
+
+      ctx.clearRect(0, 0, w, h);
+      gridBackdrop(ctx, w, h, unit/2);
+
+      ctx.strokeStyle = css("--line"); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+      ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+
+      /* angle wedge between the two vectors */
+      const angA = Math.atan2(a.y, a.x), angB = Math.atan2(b.y, b.x);
+      ctx.save();
+      ctx.fillStyle = css("--accent"); ctx.globalAlpha = .10;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, unit*.85, -Math.max(angA, angB), -Math.min(angA, angB));
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      arrow(ctx, cx, cy, ...toPx(a), css("--q"), 3);
+      arrow(ctx, cx, cy, ...toPx(b), css("--k"), 3);
+
+      ctx.font = "650 13px ui-monospace, monospace";
+      ctx.fillStyle = css("--q");
+      const [ax, ay] = toPx(a); ctx.fillText("a", ax + 10, ay - 6);
+      ctx.fillStyle = css("--k");
+      const [bx, by] = toPx(b); ctx.fillText("b", bx + 10, by - 6);
+
+      const va = [a.x, a.y], vb = [b.x, b.y];
+      const d = dot(va, vb), c = cosine(va, vb);
+      const dim = Number(dimSlider.value);
+      document.getElementById("ro-dot").textContent = d.toFixed(2);
+      document.getElementById("ro-cos").textContent = c.toFixed(3);
+      document.getElementById("ro-ang").textContent = (Math.acos(Math.max(-1, Math.min(1, c)))*180/Math.PI).toFixed(0) + "°";
+      document.getElementById("ro-scaled").textContent = (d/Math.sqrt(dim)).toFixed(3);
+      dimOut.textContent = dim;
+    };
+
+    const pointFromEvent = ev => {
+      const r = canvas.getBoundingClientRect();
+      const unit = Math.min(r.width, r.height)/5.4;
+      return {
+        x: (ev.clientX - r.left - r.width/2)/unit,
+        y: (r.height/2 - (ev.clientY - r.top))/unit,
+      };
+    };
+    const near = (p, v) => Math.hypot(p.x - v.x, p.y - v.y) < .6;
+
+    canvas.addEventListener("pointerdown", ev => {
+      const p = pointFromEvent(ev);
+      dragging = near(p, a) ? a : near(p, b) ? b : null;
+      if(dragging){ canvas.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+    });
+    canvas.addEventListener("pointermove", ev => {
+      if(!dragging) return;
+      const p = pointFromEvent(ev);
+      dragging.x = Math.max(-2.4, Math.min(2.4, p.x));
+      dragging.y = Math.max(-1.8, Math.min(1.8, p.y));
+      draw();
+    });
+    const stop = () => { dragging = null; };
+    canvas.addEventListener("pointerup", stop);
+    canvas.addEventListener("pointercancel", stop);
+    dimSlider.addEventListener("input", draw);
+
+    register(draw);
+  })();
+
+  /* ══ Figure 2 · pairwise similarity grid ═════════════════════════════ */
+  (() => {
+    const canvas = document.getElementById("grid");
+    if(!canvas) return;
+    let current = "a", hover = null;
+
+    const draw = () => {
+      const { ctx, w, h } = fit(canvas);
+      const words = SENTENCES[current].words;
+      const n = words.length;
+      const pad = 78;
+      const size = Math.min((w - pad - 20)/n, (h - pad - 16)/n);
+      const x0 = Math.max(pad, (w - n*size)/2), y0 = pad;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.font = "600 12px ui-monospace, monospace";
+      ctx.textBaseline = "middle";
+
+      for(let r = 0; r < n; r++){
+        for(let c = 0; c < n; c++){
+          const s = cosine(WORDS[words[r]], WORDS[words[c]]);
+          const t = (s + 1)/2;                       /* −1..1 → 0..1 */
+          const x = x0 + c*size, y = y0 + r*size;
+          ctx.fillStyle = `color-mix(in srgb, ${css("--k")} ${Math.round(t*82)}%, ${css("--panel")})`;
+          ctx.fillRect(x, y, size-2, size-2);
+          if(hover && hover.r === r && hover.c === c){
+            ctx.strokeStyle = css("--ink"); ctx.lineWidth = 2;
+            ctx.strokeRect(x+1, y+1, size-4, size-4);
+          }
+          ctx.fillStyle = t > .62 ? "#fff" : css("--muted");
+          ctx.textAlign = "center";
+          ctx.fillText(s.toFixed(2), x + size/2 - 1, y + size/2);
+        }
+      }
+
+      ctx.fillStyle = css("--muted");
+      ctx.textAlign = "right";
+      words.forEach((word, r) => ctx.fillText(word, x0 - 12, y0 + r*size + size/2));
+      ctx.textAlign = "center";
+      words.forEach((word, c) => ctx.fillText(word, x0 + c*size + size/2 - 1, y0 - 22));
+
+      ctx.save();
+      ctx.translate(20, y0 + (n*size)/2);
+      ctx.rotate(-Math.PI/2);
+      ctx.fillStyle = css("--faint");
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillText("ATTENDING (row)", 0, 0);
+      ctx.restore();
+      ctx.fillStyle = css("--faint");
+      ctx.fillText("ATTENDED TO (column)", x0 + (n*size)/2, 22);
+
+      canvas._cells = { x0, y0, size, n };
+    };
+
+    canvas.addEventListener("pointermove", ev => {
+      const cells = canvas._cells; if(!cells) return;
+      const r0 = canvas.getBoundingClientRect();
+      const px = ev.clientX - r0.left, py = ev.clientY - r0.top;
+      const c = Math.floor((px - cells.x0)/cells.size);
+      const r = Math.floor((py - cells.y0)/cells.size);
+      const inside = r >= 0 && c >= 0 && r < cells.n && c < cells.n;
+      const next = inside ? { r, c } : null;
+      if(JSON.stringify(next) !== JSON.stringify(hover)){ hover = next; draw(); }
+    });
+    canvas.addEventListener("pointerleave", () => { if(hover){ hover = null; draw(); } });
+
+    const btnA = document.getElementById("sent-a"), btnB = document.getElementById("sent-b");
+    const pick = key => {
+      current = key;
+      btnA.setAttribute("aria-pressed", String(key === "a"));
+      btnB.setAttribute("aria-pressed", String(key === "b"));
+      draw();
+    };
+    btnA.addEventListener("click", () => pick("a"));
+    btnB.addEventListener("click", () => pick("b"));
+
+    register(draw);
+  })();
+
+  /* ══ Figure 3 · softmax lab ══════════════════════════════════════════ */
+  (() => {
+    const canvas = document.getElementById("smx");
+    if(!canvas) return;
+    const ids = ["sc0","sc1","sc2"];
+    const inputs = ids.map(id => document.getElementById(id));
+    const outs = ids.map(id => document.getElementById(id + "o"));
+    const div = document.getElementById("scd"), divOut = document.getElementById("scdo");
+
+    const draw = () => {
+      const { ctx, w, h } = fit(canvas);
+      const raw = inputs.map(i => Number(i.value));
+      const d = Number(div.value);
+      const scaled = raw.map(v => v/d);
+      const expd = scaled.map(Math.exp);
+      const weights = softmax(scaled);
+
+      inputs.forEach((inp, i) => { outs[i].textContent = Number(inp.value).toFixed(1); });
+      divOut.textContent = d.toFixed(2);
+
+      ctx.clearRect(0, 0, w, h);
+      const panels = [
+        { title: "SCALED SCORE",   vals: scaled,  fmt: v => v.toFixed(2), colour: css("--faint"), signed: true  },
+        { title: "EXPONENTIAL",    vals: expd,    fmt: v => v.toFixed(2), colour: css("--k"),     signed: false },
+        { title: "WEIGHT (SUM 1)", vals: weights, fmt: v => (v*100).toFixed(0) + "%", colour: css("--v"), signed: false },
+      ];
+      const pw = w/3, top = 40, bottom = h - 28;
+
+      panels.forEach((panel, pi) => {
+        const ox = pi*pw;
+        ctx.font = "600 10px ui-monospace, monospace";
+        ctx.fillStyle = css("--faint");
+        ctx.textAlign = "left";
+        ctx.fillText(panel.title, ox + 16, 20);
+
+        const peak = Math.max(...panel.vals.map(Math.abs), panel.signed ? 1 : 1e-6);
+        const zeroY = panel.signed ? (top + bottom)/2 : bottom;
+
+        ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(ox + 12, zeroY + .5); ctx.lineTo(ox + pw - 12, zeroY + .5); ctx.stroke();
+
+        const bw = (pw - 44)/panel.vals.length;
+        panel.vals.forEach((value, i) => {
+          const span = panel.signed ? (bottom - top)/2 - 12 : bottom - top - 12;
+          const barH = (Math.abs(value)/peak)*span;
+          const x = ox + 22 + i*bw;
+          ctx.fillStyle = panel.colour;
+          ctx.globalAlpha = .85;
+          if(value >= 0) ctx.fillRect(x, zeroY - barH, bw - 12, barH);
+          else ctx.fillRect(x, zeroY, bw - 12, barH);
+          ctx.globalAlpha = 1;
+
+          ctx.font = "650 11px ui-monospace, monospace";
+          ctx.fillStyle = css("--ink");
+          ctx.textAlign = "center";
+          const ty = value >= 0 ? zeroY - barH - 7 : zeroY + barH + 15;
+          ctx.fillText(panel.fmt(value), x + (bw-12)/2, ty);
+        });
+      });
+
+      ctx.strokeStyle = css("--line");
+      ctx.beginPath();
+      ctx.moveTo(pw, 8);  ctx.lineTo(pw, h - 8);
+      ctx.moveTo(pw*2, 8); ctx.lineTo(pw*2, h - 8);
+      ctx.stroke();
+    };
+
+    [...inputs, div].forEach(el => el.addEventListener("input", draw));
+    register(draw);
+  })();
+
+  /* ══ Figure 4 · attention moves the word ═════════════════════════════ */
+  (() => {
+    const canvas = document.getElementById("move");
+    if(!canvas) return;
+    let current = "a", progress = 0, raf = null;
+
+    /* Where does "apple" land? cosine → softmax → weighted average. */
+    const target = key => {
+      const words = SENTENCES[key].words;
+      const self = WORDS.apple;
+      const scores = words.map(word => cosine(self, WORDS[word]));
+      const weights = softmax(scores.map(s => s*3));   /* ×3 sharpens the toy scores */
+      return {
+        point: words.reduce((acc, word, i) => [
+          acc[0] + weights[i]*WORDS[word][0],
+          acc[1] + weights[i]*WORDS[word][1],
+        ], [0, 0]),
+        words, weights,
+      };
+    };
+
+    /* Frame over every word and every landing point in both sentences, so
+       switching sentence moves the apple, not the axes. */
+    const framePoints = (() => {
+      const pts = [WORDS.apple];
+      ["a","b"].forEach(key => {
+        SENTENCES[key].words.forEach(word => pts.push(WORDS[word]));
+        pts.push(target(key).point);
+      });
+      return pts;
+    })();
+
+    const draw = () => {
+      const { ctx, w, h } = fit(canvas);
+      const { unit, ox, oy, toPx } = frameFor(framePoints, w, h - 26, 58);
+      const { point, words, weights } = target(current);
+      const start = WORDS.apple;
+      const now = [lerp(start[0], point[0], progress), lerp(start[1], point[1], progress)];
+
+      ctx.clearRect(0, 0, w, h);
+      gridBackdrop(ctx, w, h, unit/2);
+      axes(ctx, w, h, ox, oy);
+
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillStyle = css("--faint"); ctx.textAlign = "right";
+      ctx.fillText("TECHNOLOGY →", w - 12, oy - 10);
+      ctx.save(); ctx.translate(ox + 14, 18); ctx.textAlign = "left";
+      ctx.fillText("↑ FRUIT", 0, 0); ctx.restore();
+
+      /* context words, sized by how much weight apple gives them */
+      words.forEach((word, i) => {
+        if(word === "apple") return;
+        const [x, y] = toPx(WORDS[word]);
+        const [ax, ay] = toPx(now);
+        ctx.save();
+        ctx.strokeStyle = css("--v");
+        ctx.globalAlpha = .18 + weights[i]*.7;
+        ctx.lineWidth = 1 + weights[i]*7;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ax, ay); ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = css("--ink");
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+        ctx.font = "600 13px ui-sans-serif, system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(word, x, y - 14);
+        ctx.font = "600 10px ui-monospace, monospace";
+        ctx.fillStyle = css("--v");
+        ctx.fillText((weights[i]*100).toFixed(0) + "%", x, y + 22);
+      });
+
+      /* apple: dashed original, solid current */
+      const [sx, sy] = toPx(start), [nx, ny] = toPx(now);
+      ctx.save();
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = css("--faint"); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+
+      if(progress > .02){
+        ctx.save();
+        ctx.setLineDash([3, 5]); ctx.strokeStyle = css("--q"); ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(nx, ny); ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.fillStyle = css("--q");
+      ctx.beginPath(); ctx.arc(nx, ny, 8, 0, Math.PI*2); ctx.fill();
+      ctx.font = "650 14px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("apple", nx, ny - 18);
+
+      ctx.font = "600 11px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted");
+      ctx.textAlign = "left";
+      ctx.fillText(`“${SENTENCES[current].label}”`, 14, h - 12);
+    };
+
+    const animate = () => {
+      if(raf) cancelAnimationFrame(raf);
+      if(reduceMotion){ progress = 1; draw(); return; }
+      progress = 0;
+      const t0 = performance.now();
+      const tick = now => {
+        const t = Math.min((now - t0)/900, 1);
+        progress = 1 - Math.pow(1 - t, 3);          /* ease-out cubic */
+        draw();
+        if(t < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
+
+    const btnA = document.getElementById("mv-a"), btnB = document.getElementById("mv-b");
+    const pick = key => {
+      current = key;
+      btnA.setAttribute("aria-pressed", String(key === "a"));
+      btnB.setAttribute("aria-pressed", String(key === "b"));
+      animate();
+    };
+    btnA.addEventListener("click", () => pick("a"));
+    btnB.addEventListener("click", () => pick("b"));
+    document.getElementById("mv-reset").addEventListener("click", () => { progress = 0; draw(); });
+
+    register(() => { progress = progress || 1; draw(); });
+    animate();
+  })();
+
+  /* ══ Figure 6 · asymmetry of the score matrix ════════════════════════
+     Shows S = QKᵀ/√d before softmax, so symmetry is legible directly.
+     Tied mode sets W_K = W_Q, which makes M = W_Q W_Qᵀ — symmetric by
+     construction, and the mirror gap goes to exactly zero.               */
+  (() => {
+    const canvas = document.getElementById("asym");
+    if(!canvas) return;
+
+    const W_Q = [[1.20,-0.40],[0.30, 1.10]];
+    const W_K = [[0.60, 0.90],[-0.70,0.50]];
+    const apply = (M, v) => [M[0][0]*v[0] + M[0][1]*v[1], M[1][0]*v[0] + M[1][1]*v[1]];
+    const words = SENTENCES.a.words;                 /* an, apple, and, orange */
+    let tied = false;
+
+    const scores = () => {
+      const wk = tied ? W_Q : W_K;
+      const qs = words.map(word => apply(W_Q, WORDS[word]));
+      const ks = words.map(word => apply(wk,  WORDS[word]));
+      return qs.map(q => ks.map(k => dot(q, k)/Math.SQRT2));
+    };
+
+    const draw = () => {
+      const { ctx, w, h } = fit(canvas);
+      const S = scores();
+      const n = words.length;
+      const pad = 82;
+      const size = Math.min((w - pad - 20)/n, (h - pad - 16)/n);
+      const x0 = pad, y0 = pad;
+      const peak = Math.max(...S.flat().map(Math.abs), 1e-6);
+
+      const iApple = words.indexOf("apple"), iOrange = words.indexOf("orange");
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.textBaseline = "middle";
+
+      for(let r = 0; r < n; r++){
+        for(let c = 0; c < n; c++){
+          const value = S[r][c];
+          const t = Math.abs(value)/peak;
+          const hue = value >= 0 ? css("--k") : css("--q");
+          const x = x0 + c*size, y = y0 + r*size;
+          ctx.fillStyle = `color-mix(in srgb, ${hue} ${Math.round(t*80)}%, ${css("--panel")})`;
+          ctx.fillRect(x, y, size-2, size-2);
+
+          const mirrored = (r === iApple && c === iOrange) || (r === iOrange && c === iApple);
+          if(mirrored){
+            ctx.strokeStyle = css("--ink"); ctx.lineWidth = 2.5;
+            ctx.strokeRect(x+1.5, y+1.5, size-5, size-5);
+          }
+          ctx.fillStyle = t > .6 ? "#fff" : css("--muted");
+          ctx.font = mirrored ? "700 12px ui-monospace, monospace" : "600 12px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(value.toFixed(2), x + size/2 - 1, y + size/2);
+        }
+      }
+
+      ctx.font = "600 12px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted");
+      ctx.textAlign = "right";
+      words.forEach((word, r) => ctx.fillText(word, x0 - 12, y0 + r*size + size/2));
+      ctx.textAlign = "center";
+      words.forEach((word, c) => ctx.fillText(word, x0 + c*size + size/2 - 1, y0 - 22));
+
+      ctx.save();
+      ctx.translate(22, y0 + (n*size)/2); ctx.rotate(-Math.PI/2);
+      ctx.fillStyle = css("--faint"); ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillText("ATTENDING (query)", 0, 0);
+      ctx.restore();
+      ctx.fillStyle = css("--faint");
+      ctx.fillText("ATTENDED TO (key)", x0 + (n*size)/2, 22);
+
+      let gap = 0;
+      for(let r = 0; r < n; r++)
+        for(let c = 0; c < n; c++)
+          gap = Math.max(gap, Math.abs(S[r][c] - S[c][r]));
+
+      document.getElementById("ro-ao").textContent = S[iApple][iOrange].toFixed(2);
+      document.getElementById("ro-oa").textContent = S[iOrange][iApple].toFixed(2);
+      document.getElementById("ro-asym").textContent = gap.toFixed(2);
+    };
+
+    const free = document.getElementById("asym-free"), tie = document.getElementById("asym-tied");
+    const pick = isTied => {
+      tied = isTied;
+      free.setAttribute("aria-pressed", String(!isTied));
+      tie.setAttribute("aria-pressed", String(isTied));
+      draw();
+    };
+    free.addEventListener("click", () => pick(false));
+    tie.addEventListener("click", () => pick(true));
+
+    register(draw);
+  })();
+
+  /* ══ Figure 5 · one word set, three spaces ═══════════════════════════ */
+  (() => {
+    const canvas = document.getElementById("spaces");
+    if(!canvas) return;
+
+    /* Hand-picked 2×2 projections — chosen to make the point legible.
+       W_KQ exaggerates the fruit/tech split; W_V regroups by what follows. */
+    const IDENTITY = [[1,0],[0,1]];
+    const W_KQ     = [[1.45,-0.55],[-0.35,1.5]];
+    const W_V      = [[0.35,1.15],[1.05,0.25]];
+    const apply = (M, v) => [M[0][0]*v[0] + M[0][1]*v[1], M[1][0]*v[0] + M[1][1]*v[1]];
+
+    const MODES = {
+      e: { matrix: IDENTITY, colour: "--muted", title: "Original embedding — general word meaning" },
+      k: { matrix: W_KQ,     colour: "--k",     title: "K / Q space — arranged so similarity is easy to read" },
+      v: { matrix: W_V,      colour: "--v",     title: "V space — arranged for what the model predicts next" },
+    };
+    let mode = "e", progress = 1, from = {}, raf = null;
+
+    const positions = key => Object.fromEntries(
+      Object.entries(WORDS).map(([word, vec]) => [word, apply(MODES[key].matrix, vec)])
+    );
+    let shown = positions("e");
+
+    /* One frame covering all three projections keeps the axes still while the
+       words rearrange, which is the whole point of the comparison. */
+    const framePoints = Object.keys(MODES).flatMap(key => Object.values(positions(key)));
+
+    const draw = () => {
+      const { ctx, w, h } = fit(canvas);
+      const { unit, ox, oy, toPx } = frameFor(framePoints, w, h - 26, 62);
+
+      ctx.clearRect(0, 0, w, h);
+      gridBackdrop(ctx, w, h, unit/2);
+      axes(ctx, w, h, ox, oy);
+
+      const colour = css(MODES[mode].colour);
+      Object.entries(shown).forEach(([word, vec]) => {
+        const [x, y] = toPx(vec);
+        arrow(ctx, ox, oy, x, y, colour, 2);
+        /* Label beyond the arrowhead, along the vector — words at similar
+           angles (an / and) then separate radially instead of overprinting. */
+        const len = Math.hypot(x - ox, y - oy) || 1;
+        const lx = x + ((x - ox)/len)*16, ly = y + ((y - oy)/len)*16;
+        ctx.fillStyle = css("--ink");
+        ctx.font = "650 13px ui-sans-serif, system-ui, sans-serif";
+        ctx.textAlign = x < ox - 8 ? "right" : x > ox + 8 ? "left" : "center";
+        ctx.textBaseline = y > oy ? "top" : "bottom";
+        ctx.fillText(word, lx, ly);
+        ctx.textBaseline = "alphabetic";
+      });
+
+      ctx.font = "600 11px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted");
+      ctx.textAlign = "left";
+      ctx.fillText(MODES[mode].title, 14, h - 12);
+    };
+
+    const animate = key => {
+      const to = positions(key);
+      from = { ...shown };
+      mode = key;
+      if(reduceMotion){ shown = to; draw(); return; }
+      if(raf) cancelAnimationFrame(raf);
+      const t0 = performance.now();
+      const tick = now => {
+        const t = Math.min((now - t0)/650, 1);
+        const e = 1 - Math.pow(1 - t, 3);
+        shown = Object.fromEntries(Object.keys(to).map(word => [
+          word,
+          [lerp(from[word][0], to[word][0], e), lerp(from[word][1], to[word][1], e)],
+        ]));
+        draw();
+        if(t < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
+
+    const buttons = { e: "sp-e", k: "sp-k", v: "sp-v" };
+    Object.entries(buttons).forEach(([key, id]) => {
+      document.getElementById(id).addEventListener("click", () => {
+        Object.values(buttons).forEach(other =>
+          document.getElementById(other).setAttribute("aria-pressed", String(other === id)));
+        animate(key);
+      });
+    });
+
+    register(draw);
+  })();
+
+  /* ══ Figures 7 & 8 · training, and the transposed blame ══════════════
+     A real (if tiny) gradient descent, run in the page. Task: every token
+     attends to the next one — directional by construction, so no symmetric
+     score matrix can express it. Started tied, W_Q and W_K come apart on
+     their own, because G = A − A* is not symmetric and the transpose sends
+     rows to Q and columns to K.                                          */
+  (() => {
+    const trainCanvas = document.getElementById("trainlab");
+    const blameCanvas = document.getElementById("blame");
+    if(!trainCanvas || !blameCanvas) return;
+
+    const NAMES = SENTENCES.a.words;              /* an, apple, and, orange */
+    const N = NAMES.length, DK = 2, LR = 0.5, DIMS = 4;
+    const TARGET = [[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,1]];
+
+    /* Seeded, so the figure tells the same story on every visit. */
+    const rng = seed => {
+      let s = seed >>> 0;
+      return () => {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    const mul = (A, B) => A.map(row => B[0].map((_, j) => row.reduce((s, v, k) => s + v*B[k][j], 0)));
+    const transpose = A => A[0].map((_, j) => A.map(r => r[j]));
+    const softmaxRow = row => {
+      const m = Math.max(...row);
+      const e = row.map(v => Math.exp(v - m));
+      const t = e.reduce((a, b) => a + b, 0);
+      return e.map(v => v/t);
+    };
+
+    /* Two semantic dimensions from the rest of the page, plus two positional
+       ones. "Drop position" zeroes the positional pair rather than reshaping,
+       which starves those weights of gradient — same effect, steady shapes. */
+    const buildX = withPos => NAMES.map((word, i) => {
+      const [a, b] = WORDS[word];
+      return withPos ? [a, b, Math.sin(i*Math.PI/4), Math.cos(i*Math.PI/4)] : [a, b, 0, 0];
+    });
+
+    let X, WQ, WK, step = 0, A = null, G = null, loss = 0, history = [];
+    let startMode = "tied", withPos = true, running = null;
+
+    const separation = () => Math.sqrt(
+      WQ.reduce((s, row, i) => s + row.reduce((t, v, j) => t + (v - WK[i][j])**2, 0), 0));
+
+    const evaluate = () => {
+      const Q = mul(X, WQ), K = mul(X, WK), scale = Math.sqrt(DK);
+      const S = Q.map(q => K.map(k => q.reduce((acc, v, i) => acc + v*k[i], 0)/scale));
+      A = S.map(softmaxRow);
+      loss = 0;
+      for(let i = 0; i < N; i++)
+        for(let j = 0; j < N; j++)
+          if(TARGET[i][j]) loss -= Math.log(A[i][j] + 1e-12);
+      loss /= N;
+      G = A.map((row, i) => row.map((v, j) => (v - TARGET[i][j])/N));
+      return { Q, K };
+    };
+
+    const trainStep = () => {
+      const { Q, K } = evaluate();
+      const scale = Math.sqrt(DK);
+      const dQ = mul(G, K).map(r => r.map(v => v/scale));          /* rows    */
+      const dK = mul(transpose(G), Q).map(r => r.map(v => v/scale)); /* columns */
+      const gWQ = mul(transpose(X), dQ), gWK = mul(transpose(X), dK);
+      for(let i = 0; i < DIMS; i++)
+        for(let j = 0; j < DK; j++){
+          WQ[i][j] -= LR*gWQ[i][j];
+          WK[i][j] -= LR*gWK[i][j];
+        }
+      step++;
+      evaluate();
+      history.push({ step, loss, sep: separation() });
+    };
+
+    const reset = () => {
+      if(running){ clearInterval(running); running = null; }
+      X = buildX(withPos);
+      const r = rng(7);
+      const fresh = () => Array.from({length: DIMS}, () => Array.from({length: DK}, () => (r()*2 - 1)*0.4));
+      WQ = fresh();
+      WK = startMode === "tied" ? WQ.map(row => row.slice()) : fresh();
+      step = 0;
+      evaluate();
+      history = [{ step: 0, loss, sep: separation() }];
+      redraw();
+    };
+
+    /* ── figure 7 ─────────────────────────────────────────────────────── */
+    const drawTrain = () => {
+      const { ctx, w, h } = fit(trainCanvas);
+      ctx.clearRect(0, 0, w, h);
+      ctx.textBaseline = "middle";
+
+      /* left: the attention matrix, with the target outlined */
+      const cell = Math.min((w*0.40 - 76)/N, (h - 92)/N);
+      const gx = 76, gy = 56;
+      for(let i = 0; i < N; i++){
+        for(let j = 0; j < N; j++){
+          const x = gx + j*cell, y = gy + i*cell;
+          ctx.fillStyle = `color-mix(in srgb, ${css("--v")} ${Math.round(A[i][j]*88)}%, ${css("--panel")})`;
+          ctx.fillRect(x, y, cell - 2, cell - 2);
+          if(TARGET[i][j]){
+            ctx.strokeStyle = css("--ink"); ctx.lineWidth = 2;
+            ctx.strokeRect(x + 1, y + 1, cell - 4, cell - 4);
+          }
+          ctx.fillStyle = A[i][j] > .6 ? "#fff" : css("--muted");
+          ctx.font = "600 10px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText(A[i][j].toFixed(2), x + cell/2 - 1, y + cell/2);
+        }
+      }
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted"); ctx.textAlign = "right";
+      NAMES.forEach((word, i) => ctx.fillText(word, gx - 8, gy + i*cell + cell/2));
+      ctx.textAlign = "left";
+      ctx.fillStyle = css("--faint");
+      ctx.fillText("ATTENTION — OUTLINE IS THE TARGET", 12, 26);
+
+      /* right: loss and separation over training */
+      const px = w*0.46, pw = w - px - 18, py = 56, ph = h - 96;
+      const maxStep = Math.max(history[history.length - 1].step, 20);
+      const maxLoss = Math.max(...history.map(p => p.loss), 1.5);
+      const maxSep  = Math.max(...history.map(p => p.sep), 1);
+
+      ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, py); ctx.lineTo(px, py + ph); ctx.lineTo(px + pw, py + ph);
+      ctx.stroke();
+
+      /* random-guess reference line, ln(4) */
+      const lnN = Math.log(N);
+      if(lnN <= maxLoss){
+        const y = py + ph - (lnN/maxLoss)*ph;
+        ctx.save();
+        ctx.setLineDash([3, 4]); ctx.strokeStyle = css("--faint");
+        ctx.beginPath(); ctx.moveTo(px, y); ctx.lineTo(px + pw, y); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = css("--faint");
+        ctx.font = "600 9px ui-monospace, monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("ln 4 — random guessing", px + pw, y - 7);
+      }
+
+      /* Log-spaced steps: almost everything worth seeing happens in the first
+         fifty, and a linear axis flattens it against the origin. */
+      const xOf = s => px + (Math.log1p(s)/Math.log1p(maxStep))*pw;
+      const line = (key, max, colour) => {
+        ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.beginPath();
+        history.forEach((p, i) => {
+          const x = xOf(p.step);
+          const y = py + ph - (p[key]/max)*ph;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+        ctx.stroke();
+      };
+      line("sep", maxSep, css("--q"));
+      line("loss", maxLoss, css("--v"));
+
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.textAlign = "left";
+      ctx.fillStyle = css("--q");
+      ctx.fillText(`‖W_Q − W_K‖   peak ${maxSep.toFixed(1)}`, px, 26);
+      ctx.fillStyle = css("--v");
+      ctx.fillText("LOSS", px, 40);
+      ctx.fillStyle = css("--faint");
+      ctx.textAlign = "right";
+      ctx.fillText(`${maxStep} steps — log spaced`, px + pw, py + ph + 18);
+
+      document.getElementById("ro-step").textContent = step;
+      document.getElementById("ro-loss").textContent = loss.toFixed(4);
+      document.getElementById("ro-sep").textContent = separation().toFixed(2);
+    };
+
+    /* ── figure 8 ─────────────────────────────────────────────────────── */
+    const SUPER = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴",
+                    5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
+    const superscript = n => String(n).split("").map(ch => SUPER[ch] ?? ch).join("");
+    let blameMode = "q";
+    const drawBlame = () => {
+      const { ctx, w, h } = fit(blameCanvas);
+      ctx.clearRect(0, 0, w, h);
+      ctx.textBaseline = "middle";
+
+      const cell = Math.min((w - 220)/N, (h - 110)/N);
+      const gx = Math.max(110, (w - N*cell)/2), gy = 62;
+      const peak = Math.max(...G.flat().map(Math.abs));
+
+      /* As training converges the blame shrinks toward zero, and fixed
+         decimals would print a grid of 0.000 that shows nothing. Scale to the
+         largest entry and state the exponent, so the shape stays readable at
+         any magnitude. */
+      const exponent = peak > 1e-12 ? Math.floor(Math.log10(peak)) : 0;
+      const factor = Math.pow(10, -exponent);
+
+      for(let i = 0; i < N; i++){
+        for(let j = 0; j < N; j++){
+          const value = G[i][j];
+          const hue = value >= 0 ? css("--k") : css("--q");
+          const x = gx + j*cell, y = gy + i*cell;
+          const share = peak > 1e-12 ? Math.abs(value)/peak : 0;
+          ctx.fillStyle = `color-mix(in srgb, ${hue} ${Math.round(share*78)}%, ${css("--panel")})`;
+          ctx.fillRect(x, y, cell - 2, cell - 2);
+          ctx.fillStyle = share > .55 ? "#fff" : css("--ink");
+          ctx.font = "600 11px ui-monospace, monospace";
+          ctx.textAlign = "center";
+          ctx.fillText((value*factor).toFixed(2), x + cell/2 - 1, y + cell/2);
+        }
+      }
+
+      /* the slice that one Q or one K vector is assembled from */
+      const accent = blameMode === "q" ? css("--q") : css("--k");
+      ctx.strokeStyle = accent; ctx.lineWidth = 2.5;
+      for(let s = 0; s < N; s++){
+        if(blameMode === "q") ctx.strokeRect(gx - 3, gy + s*cell - 3, N*cell + 4, cell + 4);
+        else ctx.strokeRect(gx + s*cell - 3, gy - 3, cell + 4, N*cell + 4);
+      }
+
+      ctx.font = "600 10px ui-monospace, monospace";
+      ctx.fillStyle = css("--muted"); ctx.textAlign = "right";
+      NAMES.forEach((word, i) => ctx.fillText(word, gx - 12, gy + i*cell + cell/2));
+      ctx.textAlign = "center";
+      NAMES.forEach((word, j) => ctx.fillText(word, gx + j*cell + cell/2 - 1, gy - 24));
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = css("--faint");
+      ctx.fillText(`G = A − A*   (attended too much / too little)`, 12, 24);
+      ctx.fillText(peak > 1e-12
+        ? `values × 10${exponent === 0 ? "⁰" : superscript(exponent)}   ·   step ${step}`
+        : `blame has reached zero — the run has converged   ·   step ${step}`, 12, 42);
+      ctx.fillStyle = accent;
+      ctx.font = "600 11px ui-monospace, monospace";
+      ctx.fillText(blameMode === "q"
+        ? "each ROW → one query vector: corrected by the words it looked at"
+        : "each COLUMN → one key vector: corrected by the words that looked at it",
+        12, h - 16);
+    };
+
+    const redraw = () => { drawTrain(); drawBlame(); };
+
+    document.getElementById("tr-step").addEventListener("click", () => { trainStep(); redraw(); });
+    document.getElementById("tr-run").addEventListener("click", () => {
+      if(running){ clearInterval(running); running = null; return; }
+      let left = 200;
+      running = setInterval(() => {
+        for(let k = 0; k < 4 && left > 0; k++, left--) trainStep();
+        redraw();
+        if(left <= 0){ clearInterval(running); running = null; }
+      }, 30);
+    });
+
+    const tiedBtn = document.getElementById("tr-tied");
+    const randBtn = document.getElementById("tr-rand");
+    const posBtn  = document.getElementById("tr-nopos");
+    const setStart = kind => {
+      startMode = kind;
+      tiedBtn.setAttribute("aria-pressed", String(kind === "tied"));
+      randBtn.setAttribute("aria-pressed", String(kind === "random"));
+      reset();
+    };
+    tiedBtn.addEventListener("click", () => setStart("tied"));
+    randBtn.addEventListener("click", () => setStart("random"));
+    posBtn.addEventListener("click", () => {
+      withPos = !withPos;
+      posBtn.setAttribute("aria-pressed", String(!withPos));
+      posBtn.textContent = withPos ? "Drop position" : "Restore position";
+      reset();
+    });
+
+    const qBtn = document.getElementById("bl-q"), kBtn = document.getElementById("bl-k");
+    const setBlame = which => {
+      blameMode = which;
+      qBtn.setAttribute("aria-pressed", String(which === "q"));
+      kBtn.setAttribute("aria-pressed", String(which === "k"));
+      drawBlame();
+    };
+    qBtn.addEventListener("click", () => setBlame("q"));
+    kBtn.addEventListener("click", () => setBlame("k"));
+
+    reset();
+    register(redraw);
+  })();
+})();
+</script>
+</body>
+</html>
