@@ -1,0 +1,7 @@
+# Transcript tooling for sourcing training material.
+yt-dlp>=2024.1.1
+
+# Optional: only needed for `fetch_transcript.py --whisper`, which transcribes
+# audio locally for videos that have no captions at all. Also needs ffmpeg on
+# PATH. Uncomment if you need it.
+# faster-whisper>=1.0

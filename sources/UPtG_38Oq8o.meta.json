@@ -1,0 +1,15 @@
+{
+  "id": "UPtG_38Oq8o",
+  "title": "The math behind Attention: Keys, Queries, and Values matrices",
+  "author": "Serrano.Academy (Luis Serrano)",
+  "url": "https://www.youtube.com/watch?v=UPtG_38Oq8o",
+  "duration_seconds": 1980,
+  "upload_date": "20230831",
+  "caption_language": "en",
+  "caption_kind": "unavailable",
+  "transcript_blocks": 0,
+  "retrieved": "2026-08-14",
+  "retrieval_method": "manual",
+  "retrieval_note": "fetch_transcript.py could not reach YouTube from this environment ('Sign in to confirm you're not a bot' — YouTube blocks datacenter IP ranges). Section structure and quotations used in attention-math.html were taken from a third-party transcript service and the publisher's own lesson page. No verbatim transcript is stored in this repository. Re-run the tool from an ordinary network connection to populate UPtG_38Oq8o.transcript.md with timestamps.",
+  "used_by": ["attention-math.html"]
+}
